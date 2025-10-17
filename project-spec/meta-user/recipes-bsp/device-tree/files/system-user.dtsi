@@ -1,0 +1,45 @@
+/ {
+};
+
+
+/*
+&amba_pl {
+    i2c0_axi: i2c@41600000 {
+        compatible = "xlnx,axi-iic-2.1";
+        reg = <0x41600000 0x10000>;
+        interrupt-parent = <&intc>;
+        interrupts = <0 61 4>;
+        status = "okay";
+
+        #clock-frequency = <100000>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        //lepton@2a { compatible = "flir,lepton"; reg = <0x2a>; };
+    };
+};
+
+&amba_pl {
+    i2c0_axi: i2c@41600000 {
+        status = "disabled";   // ← 임시 비활성화
+    };
+};
+
+&gem0 {
+    status = "okay";
+    phy-mode = "rgmii-id";
+    phy-handle = <&phy0>;
+
+    mdio {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        phy0: ethernet-phy@1 {
+            reg = <1>;
+            //선택: Realtek 특성 맞춤 힌트들 — 없어도 동작은 함
+            //realtek,tx-delay = <0>; realtek,rx-delay = <0>;
+            //realtek,clkout-disable;
+        };
+    };
+};
+*/
