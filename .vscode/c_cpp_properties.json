@@ -1,0 +1,45 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/src/software/project",
+                "${workspaceFolder}/src/software/project/**",
+                "${workspaceFolder}/src/software/project/ipc",
+                "${workspaceFolder}/src/software/project/ipc**",
+                "${workspaceFolder}/src/software/project/threads",
+                "${workspaceFolder}/src/software/project/threads_includes",
+                "${workspaceFolder}/src/software/project/components",
+                "${workspaceFolder}/src/software/project/components/includes",
+                "${workspaceFolder}/src/software/project/components/core"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "browse": {
+                "path": [
+                    "${workspaceFolder}/**",
+                    "${workspaceFolder}/src/software/project",
+                    "${workspaceFolder}/src/software/project/**",
+                    "${workspaceFolder}/src/software/project/ipc",
+                    "${workspaceFolder}/src/software/project/ipc**",
+                    "${workspaceFolder}/src/software/project/threads",
+                    "${workspaceFolder}/src/software/project/threads_includes",
+                    "${workspaceFolder}/src/software/project/components",
+                    "${workspaceFolder}/src/software/project/components/includes",
+                    "${workspaceFolder}/src/software/project/components/core"
+                ],
+                "limitSymbolsToIncludedHeaders": true
+            },
+            "windowsSdkVersion": "10.0.26100.0",
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}
