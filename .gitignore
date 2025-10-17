@@ -11,3 +11,4 @@ pre-built/linux/
 /components/plnx_workspace
 /components/yocto
 /project-spec/meta-plnx-generated/
+.Xil
