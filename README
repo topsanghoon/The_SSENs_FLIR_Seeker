@@ -1,0 +1,20 @@
+//petalinux setting and build
+petalinux-config --get-hw-description project-spec/hw-description --silentconfig
+petalinux-build
+
+//you can find build object in {workspace}/image/linux
+
+
+//if can't boot
+// 1) DT 산출물 깔끔히 지우기
+petalinux-build -c device-tree -x cleanall
+rm -rf components/plnx_workspace/device-tree
+
+// 2) 새 XSA 반영 (메뉴 뜨면 Save → Exit)
+#환경 재설정 필요
+petalinux-config --get-hw-description <XSA_폴더> --silentconfig
+
+// 3) DT만 먼저 재생성
+petalinux-build -c device-tree
+
+petalinux-build
