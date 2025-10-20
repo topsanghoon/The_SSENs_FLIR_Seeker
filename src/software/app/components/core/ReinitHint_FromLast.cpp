@@ -3,6 +3,14 @@
 
 namespace flir {
 
+/*
+Todo
+현재는 그냥 틀만 있는데 나중에 움직이는 방향을 고려해서 살짝 옆으로 옮겨서 다시 타겟팅 위치를 잡아보는 식으로 구현할 예정
+이를 위해서 움직이는 방향을 알아야하는데 현재 그 내용이 없음
+그 부분이 들어오게 된다면 이걸 사용하고 그게 아니라면 그냥 원래 위치대로 다시 잡아서 재시도 할 예정
+*/
+
+
 cv::Rect2f ReinitHint_FromLast::suggest(const cv::Rect2f& last_box) {
     cv::Rect2f hint = last_box;
 

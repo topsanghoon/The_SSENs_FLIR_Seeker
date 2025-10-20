@@ -16,7 +16,12 @@ struct TrackEvent        { cv::Rect2f box; float score; uint64_t ts; uint32_t fr
 struct LostEvent         { cv::Rect2f last_box; uint64_t ts; uint32_t frame_seq; };
 struct NeedReselectEvent { };
 
-struct ArucoEvent        { int id; cv::Rect2f box; /*pose?*/ uint64_t ts; };
+struct ArucoEvent {
+    int id;
+    std::array<cv::Point2f,4> corners; // 순서: TL, TR, BR, BL
+    cv::Rect2f box;                    // 편의용
+    uint64_t ts;
+};
 struct MetaCtrlEvent     { int cmd; uint64_t ts; };
 struct CtrlStateEvent    { int state; uint64_t ts; };
 
