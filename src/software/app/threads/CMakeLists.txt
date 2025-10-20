@@ -19,7 +19,7 @@ target_link_libraries(threads
 )
 
 if (ENABLE_EO)
-  # 스레드 쪽에서도 OpenCV 심볼을 쓸 수 있으니 동일하게 추가
+  # 스레드 쪽에서도 OpenCV 심볼을 쓸 수 있으니 동일하게 추가s
   find_package(OpenCV 4 REQUIRED)
   target_include_directories(threads PUBLIC ${OpenCV_INCLUDE_DIRS})
   target_link_libraries(threads  PUBLIC ${OpenCV_LIBS})

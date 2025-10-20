@@ -7,8 +7,8 @@ add_library(components STATIC ${COMPONENTS_SRC})
 
 target_include_directories(components
   PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/includes        # app/components/includes/*.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ipc          # ipc_types.hpp 등을 직접 include할 때 대비
+    ${CMAKE_CURRENT_SOURCE_DIR}/..       # app/components/includes/*.hpp
+    # ${CMAKE_CURRENT_SOURCE_DIR}/../ipc          # ipc_types.hpp 등을 직접 include할 때 대비
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core
 )

@@ -28,7 +28,7 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 1,
+				"line" : 5,
 				"parent" : 0
 			},
 			{
@@ -43,7 +43,7 @@
 			{
 				"command" : 2,
 				"file" : 0,
-				"line" : 5,
+				"line" : 10,
 				"parent" : 0
 			}
 		]
@@ -76,7 +76,12 @@
 			[
 				{
 					"backtrace" : 4,
-					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/ipc"
+					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/ipc/.."
+				},
+				{
+					"backtrace" : 4,
+					"isSystem" : true,
+					"path" : "/usr/local/include/opencv4"
 				}
 			],
 			"language" : "CXX",

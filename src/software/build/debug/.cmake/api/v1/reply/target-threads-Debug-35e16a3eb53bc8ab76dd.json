@@ -3,7 +3,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "app/components/libcomponents.a"
+			"path" : "app/threads/libthreads.a"
 		}
 	],
 	"backtrace" : 1,
@@ -18,7 +18,7 @@
 		],
 		"files" : 
 		[
-			"app/components/CMakeLists.txt",
+			"app/threads/CMakeLists.txt",
 			"CMakeLists.txt"
 		],
 		"nodes" : 
@@ -29,7 +29,7 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 6,
+				"line" : 5,
 				"parent" : 0
 			},
 			{
@@ -50,13 +50,13 @@
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 8,
+				"line" : 7,
 				"parent" : 0
 			},
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 27,
+				"line" : 24,
 				"parent" : 0
 			}
 		]
@@ -89,19 +89,19 @@
 			[
 				{
 					"backtrace" : 5,
-					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/includes"
+					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/.."
 				},
 				{
 					"backtrace" : 5,
-					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/../ipc"
-				},
-				{
-					"backtrace" : 5,
-					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core"
+					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads"
 				},
 				{
 					"backtrace" : 2,
-					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/ipc"
+					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/.."
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/ipc/.."
 				},
 				{
 					"backtrace" : 6,
@@ -120,11 +120,7 @@
 				5,
 				6,
 				7,
-				8,
-				9,
-				10,
-				11,
-				12
+				8
 			]
 		}
 	],
@@ -133,15 +129,19 @@
 		{
 			"backtrace" : 2,
 			"id" : "ipc::@ef3dc89c71337de3085b"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "components::@2a3d43a2e823b798d751"
 		}
 	],
-	"id" : "components::@2a3d43a2e823b798d751",
-	"name" : "components",
-	"nameOnDisk" : "libcomponents.a",
+	"id" : "threads::@b3bb3d619fd98715b6fc",
+	"name" : "threads",
+	"nameOnDisk" : "libthreads.a",
 	"paths" : 
 	{
-		"build" : "app/components",
-		"source" : "app/components"
+		"build" : "app/threads",
+		"source" : "app/threads"
 	},
 	"sourceGroups" : 
 	[
@@ -157,11 +157,7 @@
 				5,
 				6,
 				7,
-				8,
-				9,
-				10,
-				11,
-				12
+				8
 			]
 		}
 	],
@@ -170,79 +166,55 @@
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/ActuatorPort.cpp",
+			"path" : "app/threads/ControlThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/CsvLoggerAru.cpp",
+			"path" : "app/threads/EO_ArUcoThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/CsvLoggerCtrl.cpp",
+			"path" : "app/threads/EO_CaptureThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/CsvLoggerIR.cpp",
+			"path" : "app/threads/EO_TxThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/CsvLoggerMeta.cpp",
+			"path" : "app/threads/IR_CaptureThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/EO_ArucoDetector_OpenCV.cpp",
+			"path" : "app/threads/IR_TrackThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/EO_ArucoPreprocessor_OpenCV.cpp",
+			"path" : "app/threads/IR_TxThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/IController.cpp",
+			"path" : "app/threads/Meta_TxThread.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "app/components/core/IR_Preprocessor_LinNorm.cpp",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 1,
-			"compileGroupIndex" : 0,
-			"path" : "app/components/core/IR_Tracker_Stub.cpp",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 1,
-			"compileGroupIndex" : 0,
-			"path" : "app/components/core/MetaWire.cpp",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 1,
-			"compileGroupIndex" : 0,
-			"path" : "app/components/core/ReinitHint_FromLast.cpp",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 1,
-			"compileGroupIndex" : 0,
-			"path" : "app/components/core/TargetFusion.cpp",
+			"path" : "app/threads/Net_RxThread.cpp",
 			"sourceGroupIndex" : 0
 		}
 	],
