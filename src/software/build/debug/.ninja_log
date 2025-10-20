@@ -1,0 +1,21 @@
+# ninja log v5
+0	8	1760671234032144909	/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/cmake.verify_globs	894f14b9a8f19c73
+8	60	1760671234080145015	build.ninja	5141d71ba7c3391d
+0	11	0	/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/cmake.verify_globs	894f14b9a8f19c73
+4	25	1760671234120145104	app/components/CMakeFiles/components.dir/core/CsvLoggerCtrl.cpp.o	31cb4c548718688f
+3	28	1760671234124145112	app/components/CMakeFiles/components.dir/core/CsvLoggerAru.cpp.o	4fa82138108ee2df
+3	35	1760671234132145130	app/components/CMakeFiles/components.dir/core/ActuatorPort.cpp.o	cf143ee15ed49ce8
+5	41	1760671234136145139	app/components/CMakeFiles/components.dir/core/CsvLoggerIR.cpp.o	19b89bb8022a5313
+14	52	1760671234148145166	app/components/CMakeFiles/components.dir/core/CsvLoggerMeta.cpp.o	66c8e591650211f3
+28	57	1760671234152145174	app/components/CMakeFiles/components.dir/core/EO_ArucoPreprocessor_OpenCV.cpp.o	f4e1bf5e6602439a
+57	68	1760671234164145201	app/components/CMakeFiles/components.dir/core/MetaWire.cpp.o	fb9a46b4256b1a22
+25	73	1760671234168145209	app/components/CMakeFiles/components.dir/core/EO_ArucoDetector_OpenCV.cpp.o	1d1e915119f4a52a
+35	77	1760671234172145218	app/components/CMakeFiles/components.dir/core/IController.cpp.o	9222b7d2680c46f0
+41	82	1760671234176145227	app/components/CMakeFiles/components.dir/core/IR_Preprocessor_LinNorm.cpp.o	89a08059e32116a4
+52	86	1760671234180145236	app/components/CMakeFiles/components.dir/core/IR_Tracker_Stub.cpp.o	38faa27a86fd70d8
+0	14	1760671698308973410	/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/cmake.verify_globs	894f14b9a8f19c73
+14	63	1760671698356972153	build.ninja	5141d71ba7c3391d
+0	15	0	/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/cmake.verify_globs	894f14b9a8f19c73
+11	32	1760671698404970896	app/threads/CMakeFiles/threads.dir/EO_CaptureThread.cpp.o	add9102636cecd1c
+2	41	1760671698420970476	app/components/CMakeFiles/components.dir/core/TargetFusion.cpp.o	f8c1bc885627b254
+2	48	1760671698424970372	app/components/CMakeFiles/components.dir/core/ReinitHint_FromLast.cpp.o	65feb4ae68cd991

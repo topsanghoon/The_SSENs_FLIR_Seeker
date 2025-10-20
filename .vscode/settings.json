@@ -1,0 +1,28 @@
+{
+  "cmake.configureOnOpen": true,
+  "cmake.useCMakePresets": "always",
+  "cmake.generator": "Ninja",
+  "cmake.sourceDirectory": "${workspaceFolder}/src/software",
+
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.errorSquiggles": "enabled",
+  "cmake.exportCompileCommandsFile": true,
+
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/src/software/build/debug/compile_commands.json",
+  "C_Cpp.default.includePath": [
+  "${workspaceFolder}/**",
+  "${workspaceFolder}/src/software/**",
+  "/usr/local/include/opencv4"
+],
+"C_Cpp.default.browse.path": [
+  "${workspaceFolder}/**",
+  "${workspaceFolder}/src/software/**",
+  "/usr/local/include/opencv4"
+],
+  "files.associations": {
+    "condition_variable": "cpp",
+    "variant": "cpp",
+    "thread": "cpp"
+  }
+}

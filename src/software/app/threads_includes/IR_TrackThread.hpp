@@ -3,7 +3,7 @@
 #include <thread>
 #include <opencv2/core.hpp>
 
-#include "ipc_types.hpp"   // Event/UserCmd/FrameHandle 등
+#include "ipc/ipc_types.hpp"   // Event/UserCmd/FrameHandle 등
 #include "ipc/mailbox.hpp"     // SpscMailbox<T>
 #include "ipc/event_bus.hpp"   // IEventBus
 #include "components/includes/IR_Frame.hpp"

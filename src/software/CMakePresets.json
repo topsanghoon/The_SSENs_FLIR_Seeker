@@ -1,0 +1,40 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "linux-debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_EO": "ON",
+        "OpenCV_DIR": "/usr/local/lib/cmake/opencv4"
+      }
+    },
+    {
+      "name": "linux-release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_EO": "ON",
+        "OpenCV_DIR": "/usr/local/lib/cmake/opencv4"
+      }
+    },
+    {
+      "name": "zynq-release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/zynq-release",
+      "toolchainFile": "/home/user/petalinux-sdk/sysroots/x86_64-petalinux-linux/usr/share/cmake/OEToolchainConfig.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_EO": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug",   "configurePreset": "linux-debug" },
+    { "name": "release", "configurePreset": "linux-release" },
+    { "name": "zynq-release", "configurePreset": "zynq-release" }
+  ]
+}
