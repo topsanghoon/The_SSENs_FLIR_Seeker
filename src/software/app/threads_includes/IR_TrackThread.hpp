@@ -2,11 +2,14 @@
 #include <atomic> //std::atomic<bool> 사용, 스레드 안전한 실행 제어
 #include <thread> //백그라운드 워커 스레드 생성 및 조인 (std::thread th_)
 #include <opencv2/core.hpp> //openCV라이브러리
+
 #include "ipc/ipc_types.hpp" // ipc 타입 선언
 #include "ipc/mailbox.hpp" // SpscMailbox 사용
 #include "ipc/event_bus.hpp" //IEventBus 사용
+
 #include "components/includes/IR_Frame.hpp" //IRFrameHandle 구조체 선언
 #include "components/includes/CsvLoggerIR.hpp"
+
 #include "threads_includes/common.hpp"
 
 
@@ -37,12 +40,6 @@ struct ITrackerStrategy {
     virtual bool update(const cv::Mat& pf, cv::Rect2f& out_box, float& score) = 0;
 };
 
-struct IReinitHintPolicy {
-    virtual ~IReinitHintPolicy() = default;
-    // 추적 실패 시, 다음 초기화 위치를 추천
-    // 호출자: IR_TrackThread (연속 실패 == 3회 시)
-    virtual cv::Rect2f suggest(const cv::Rect2f& last_box) = 0;
-};
 
 struct CsvLogger {
     // 호출자: IR_TrackThread (각 시점 로깅)
@@ -55,7 +52,6 @@ struct CsvLogger {
 };
 
 struct IRTrackConfig {
-    int  reinit_threshold   = 3; // 3회 실패 → 다음 프레임에 재초기화 시도
     int  user_req_threshold = 9; // 9회 실패 → 사용자 재지정 요구
 };
 
@@ -66,46 +62,44 @@ public:
                    SpscMailbox<UserCmd>&     click_mb,
                    ITrackerStrategy&         tracker,
                    IPreprocessor&            preproc,
-                   IReinitHintPolicy&        reinit,
                    IEventBus&                bus,
                    CsvLoggerIR&              logger,
                    IRTrackConfig             cfg = {});
 
-    // 수명 제어: main/ThreadManager에서 호출
-    void start();   // 내부에서 std::thread 생성, run() 실행
-    void stop();    // 종료 플래그 set + 대기 해제
-    void join();    // 외부에서 합류
+    void start();
+    void stop();
+    void join();
 
-    // 생산자(선택 경로): 직접 주입 + 깨움
+    // 생산자(선택 경로)
     void onClickArrived(const UserCmd& cmd);
     void onFrameArrived(std::shared_ptr<IRFrameHandle> h);
 
 private:
-    // === 협력자 / 구성 ===
+    // 협력자 / 구성
     SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_mb_;
     SpscMailbox<UserCmd>&     click_mb_;
     ITrackerStrategy&         tracker_;
     IPreprocessor&            preproc_;
-    IReinitHintPolicy&        reinit_;
     IEventBus&                bus_;
     CsvLoggerIR&              log_;
     IRTrackConfig             cfg_;
 
-    // === 스레드 관리 ===
+    // 스레드 관리
     std::thread        th_;
     std::atomic<bool>  running_{false};
 
-    // === 추적 상태 ===
-    bool       new_target_     = false;
-    bool       tracking_valid_ = false;
+    // 추적 상태
+    bool       new_target_           = false;
+    bool       tracking_valid_       = false;
     cv::Rect2f target_box_{};
-    int        fail_streak_    = 0;
-    uint32_t   frame_seq_seen_ = 0;
-    uint32_t   click_seq_seen_ = 0;
+    int        fail_streak_          = 0;
+    bool       reselect_notified_    = false; // ★ NeedReselect 1회 디바운스
+    uint32_t   frame_seq_seen_       = 0;
+    uint32_t   click_seq_seen_       = 0;
 
-    // === 내부 루프/헬퍼 ===
-    void run();                  // 워커 스레드 본체(비공개)
-    void wait_until_ready();     // CLICK/FRAME 없으면 대기
+    // 내부 루프/헬퍼
+    void run();
+    void wait_until_ready();
     void handle_click(const UserCmd& cmd);
     void on_frame(IRFrameHandle& h);
     bool try_init(const cv::Mat& pf, const cv::Rect2f& box);
@@ -116,5 +110,6 @@ private:
     void emit_need_reselect();
     void cleanup();
 };
+
 
 } // namespace flir

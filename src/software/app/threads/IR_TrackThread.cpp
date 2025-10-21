@@ -12,7 +12,6 @@ IR_TrackThread::IR_TrackThread(SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_m
                                SpscMailbox<UserCmd>&     click_mb,
                                ITrackerStrategy&         tracker,
                                IPreprocessor&            preproc,
-                               IReinitHintPolicy&        reinit,
                                IEventBus&                bus,
                                CsvLoggerIR&              logger,
                                IRTrackConfig             cfg)
@@ -20,7 +19,6 @@ IR_TrackThread::IR_TrackThread(SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_m
 , click_mb_(click_mb)
 , tracker_(tracker)
 , preproc_(preproc)
-, reinit_(reinit)
 , bus_(bus)
 , log_(logger)
 , cfg_(cfg)
@@ -84,10 +82,11 @@ void IR_TrackThread::wait_until_ready() {
 }
 
 void IR_TrackThread::handle_click(const UserCmd& cmd) {
-    //목적: 클릭 정보를 상태에 반영(다음 프레임에서 init 시도)
     target_box_      = cmd.box;
     new_target_      = true;
     click_seq_seen_  = cmd.seq;
+    fail_streak_     = 0;           // ← 추가: 새 타깃으로 초기화
+    reselect_notified_ = false;     // ← 추가: 알림 플래그 리셋
     log_.click(cmd.seq, cmd.box);
 }
 
@@ -98,35 +97,70 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
     double ms = 0;
     { ScopedTimer t(ms); preproc_.run(*h.p, pf32); }
 
+    // 1) 새 타깃 초기화 시도
     if (new_target_) {
         if (try_init(pf32, target_box_)) {
-            tracking_valid_ = true; new_target_ = false; fail_streak_ = 0;
+            tracking_valid_    = true;
+            new_target_        = false;
+            fail_streak_       = 0;
+            reselect_notified_ = false;
             emit_init(target_box_, h.ts);
             log_.init_ok(h.seq, ms);
         } else {
-            tracking_valid_ = false; new_target_ = false; fail_streak_++;
+            tracking_valid_ = false;
+            new_target_     = false;
+            fail_streak_++;
             log_.init_fail(fail_streak_, ms);
+
+            // (선택) init 실패도 잃어버린 상태로 취급해서 NeedReselect 판단
+            if (fail_streak_ == 1) emit_lost(target_box_, h.ts);
+            if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
+                reselect_notified_ = true;
+                emit_need_reselect();
+            }
         }
         return;
     }
 
-    if (tracking_valid_) {
-        cv::Rect2f out; float score = 0.f;
-        if (try_update(pf32, out, score)) {
-            target_box_ = out; fail_streak_ = 0;
-            emit_track(out, score, h.ts);
-            log_.track_ok(h.seq, score, ms);
-        } else {
-            tracking_valid_ = false; fail_streak_++;
+    // 2) 이미 타깃을 잃은 상태라면: 프레임마다 누적만(재초기화 없음)
+    if (!tracking_valid_) {
+        fail_streak_++;
+        log_.track_lost(fail_streak_, ms);
+
+        if (fail_streak_ == 1) {
+            // 첫 잃어버림만 Lost 이벤트 발행 (디바운스)
             emit_lost(target_box_, h.ts);
-            log_.track_lost(fail_streak_, ms);
-            if (fail_streak_ == cfg_.reinit_threshold)
-                target_box_ = reinit_.suggest(target_box_), new_target_ = true;
-            if (fail_streak_ >= cfg_.user_req_threshold)
-                emit_need_reselect();
+        }
+        if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
+            reselect_notified_ = true;
+            emit_need_reselect();
+        }
+        return;
+    }
+
+    // 3) 유효한 상태: 업데이트 시도
+    cv::Rect2f out; float score = 0.f;
+    if (try_update(pf32, out, score)) {
+        target_box_        = out;
+        fail_streak_       = 0;
+        reselect_notified_ = false;
+        emit_track(out, score, h.ts);
+        log_.track_ok(h.seq, score, ms);
+    } else {
+        tracking_valid_ = false;
+        fail_streak_++;
+        log_.track_lost(fail_streak_, ms);
+
+        // Lost는 첫 번만
+        emit_lost(target_box_, h.ts);
+
+        if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
+            reselect_notified_ = true;
+            emit_need_reselect();
         }
     }
 }
+
 
 
 bool IR_TrackThread::try_init(const cv::Mat& pf, const cv::Rect2f& box) {

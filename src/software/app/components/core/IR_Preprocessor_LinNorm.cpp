@@ -5,7 +5,7 @@
 
 namespace flir {
 
-void IR_Preprocessor_LinNorm::run(const IRFrame16& in16, cv::Mat& out32f) {
+void IR_Preprocessor::run(const IRFrame16& in16, cv::Mat& out32f) {
     // RAW 버퍼를 cv::Mat으로 래핑 (복사 없음)
     cv::Mat src(in16.height, in16.width, CV_16UC1, in16.data, in16.step);
 

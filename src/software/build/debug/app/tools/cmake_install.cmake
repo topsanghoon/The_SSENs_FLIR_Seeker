@@ -39,6 +39,6 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_thread/cmake_install.cmake")
+  include("/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread/cmake_install.cmake")
 endif()
 

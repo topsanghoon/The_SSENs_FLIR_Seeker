@@ -8,10 +8,10 @@
 namespace flir {
 
 // IR_Preprocessor_LinNorm.hpp
-class IR_Preprocessor_LinNorm : public IPreprocessor {
+class IR_Preprocessor : public IPreprocessor {
 public:
     // 14bit 센서면 기본값을 1/16383.f, 16bit면 1/65535.f 또는 1.0f로 사용
-    explicit IR_Preprocessor_LinNorm(float scale = 1.0f/16383.0f, float offset = 0.0f)
+    explicit IR_Preprocessor(float scale = 1.0f/16383.0f, float offset = 0.0f)
         : scale_(scale), offset_(offset) {}
 
     void run(const IRFrame16& in16, cv::Mat& out32f) override;

@@ -15,7 +15,6 @@ set(OLD_GLOB
   "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Preprocessor_LinNorm.cpp"
   "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Tracker_MOSSE.cpp"
   "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/MetaWire.cpp"
-  "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/ReinitHint_FromLast.cpp"
   "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/TargetFusion.cpp"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
