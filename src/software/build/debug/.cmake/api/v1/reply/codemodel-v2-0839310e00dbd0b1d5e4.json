@@ -73,14 +73,15 @@
 					"source" : "app/threads",
 					"targetIndexes" : 
 					[
-						3
+						4
 					]
 				},
 				{
 					"build" : "app/tools",
 					"childIndexes" : 
 					[
-						6
+						6,
+						7
 					],
 					"minimumCMakeVersion" : 
 					{
@@ -103,6 +104,20 @@
 					[
 						2
 					]
+				},
+				{
+					"build" : "app/tools/meta_txthread",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 5,
+					"projectIndex" : 0,
+					"source" : "app/tools/meta_txthread",
+					"targetIndexes" : 
+					[
+						3
+					]
 				}
 			],
 			"name" : "Debug",
@@ -117,7 +132,8 @@
 						3,
 						4,
 						5,
-						6
+						6,
+						7
 					],
 					"name" : "AGM850",
 					"targetIndexes" : 
@@ -125,7 +141,8 @@
 						0,
 						1,
 						2,
-						3
+						3,
+						4
 					]
 				}
 			],
@@ -150,6 +167,13 @@
 					"id" : "ir_thread_gui::@f79493215d9f428bd804",
 					"jsonFile" : "target-ir_thread_gui-Debug-98db5c7f2cc4161ee4a0.json",
 					"name" : "ir_thread_gui",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 7,
+					"id" : "meta_txthread_test::@47031114e49e28d2bbc4",
+					"jsonFile" : "target-meta_txthread_test-Debug-0aec085ea7208e5deb26.json",
+					"name" : "meta_txthread_test",
 					"projectIndex" : 0
 				},
 				{

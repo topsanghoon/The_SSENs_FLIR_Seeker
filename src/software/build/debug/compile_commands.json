@@ -141,5 +141,17 @@
   "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
   "command": "/usr/bin/c++   -I../../app/tools/ir_trackthread/.. -I../../app/tools/ir_trackthread/../../threads_includes -I../../app/tools/ir_trackthread/../../components/includes -I../../app/tools/ir_trackthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/ir_trackthread/CMakeFiles/ir_thread_gui.dir/__/__/threads/IR_TrackThread.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp",
   "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp"
+},
+
+{
+  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++   -I../../app/tools/meta_txthread/.. -I../../app/tools/meta_txthread/../../threads_includes -I../../app/tools/meta_txthread/../../components/includes -I../../app/tools/meta_txthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/main_meta_txthread.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/meta_txthread/main_meta_txthread.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/meta_txthread/main_meta_txthread.cpp"
+},
+
+{
+  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++   -I../../app/tools/meta_txthread/.. -I../../app/tools/meta_txthread/../../threads_includes -I../../app/tools/meta_txthread/../../components/includes -I../../app/tools/meta_txthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/__/__/threads/Meta_TxThread.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/Meta_TxThread.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/Meta_TxThread.cpp"
 }
 ]

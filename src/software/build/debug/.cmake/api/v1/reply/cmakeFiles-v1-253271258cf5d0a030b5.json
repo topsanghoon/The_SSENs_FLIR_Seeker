@@ -217,6 +217,9 @@
 		},
 		{
 			"path" : "app/tools/ir_trackthread/CMakeLists.txt"
+		},
+		{
+			"path" : "app/tools/meta_txthread/CMakeLists.txt"
 		}
 	],
 	"kind" : "cmakeFiles",

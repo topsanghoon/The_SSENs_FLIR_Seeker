@@ -490,6 +490,74 @@ build app/tools/ir_trackthread/ir_thread_gui: CXX_EXECUTABLE_LINKER__ir_thread_g
   TARGET_PDB = ir_thread_gui.dbg
 
 # =============================================================================
+# Write statements declared in CMakeLists.txt:
+# /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/CMakeLists.txt
+# =============================================================================
+
+
+#############################################
+# Utility command for rebuild_cache
+
+build app/tools/meta_txthread/CMakeFiles/rebuild_cache.util: CUSTOM_COMMAND
+  COMMAND = cd /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/meta_txthread && /usr/bin/cmake -S/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software -B/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug
+  DESC = Running CMake to regenerate build system...
+  pool = console
+  restat = 1
+
+build app/tools/meta_txthread/rebuild_cache: phony app/tools/meta_txthread/CMakeFiles/rebuild_cache.util
+
+
+#############################################
+# Utility command for edit_cache
+
+build app/tools/meta_txthread/CMakeFiles/edit_cache.util: CUSTOM_COMMAND
+  COMMAND = cd /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/meta_txthread && /usr/bin/cmake -E echo No\ interactive\ CMake\ dialog\ available.
+  DESC = No interactive CMake dialog available...
+  restat = 1
+
+build app/tools/meta_txthread/edit_cache: phony app/tools/meta_txthread/CMakeFiles/edit_cache.util
+
+# =============================================================================
+# Object build statements for EXECUTABLE target meta_txthread_test
+
+
+#############################################
+# Order-only phony target for meta_txthread_test
+
+build cmake_object_order_depends_target_meta_txthread_test: phony || cmake_object_order_depends_target_components cmake_object_order_depends_target_ipc
+
+build app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/main_meta_txthread.cpp.o: CXX_COMPILER__meta_txthread_test ../../app/tools/meta_txthread/main_meta_txthread.cpp || cmake_object_order_depends_target_meta_txthread_test
+  DEP_FILE = app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/main_meta_txthread.cpp.o.d
+  FLAGS = -g   -Wall -Wextra -Wpedantic -std=gnu++17
+  INCLUDES = -I../../app/tools/meta_txthread/.. -I../../app/tools/meta_txthread/../../threads_includes -I../../app/tools/meta_txthread/../../components/includes -I../../app/tools/meta_txthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4
+  OBJECT_DIR = app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir
+  OBJECT_FILE_DIR = app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir
+
+build app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/__/__/threads/Meta_TxThread.cpp.o: CXX_COMPILER__meta_txthread_test ../../app/threads/Meta_TxThread.cpp || cmake_object_order_depends_target_meta_txthread_test
+  DEP_FILE = app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/__/__/threads/Meta_TxThread.cpp.o.d
+  FLAGS = -g   -Wall -Wextra -Wpedantic -std=gnu++17
+  INCLUDES = -I../../app/tools/meta_txthread/.. -I../../app/tools/meta_txthread/../../threads_includes -I../../app/tools/meta_txthread/../../components/includes -I../../app/tools/meta_txthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4
+  OBJECT_DIR = app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir
+  OBJECT_FILE_DIR = app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/__/__/threads
+
+
+# =============================================================================
+# Link build statements for EXECUTABLE target meta_txthread_test
+
+
+#############################################
+# Link the executable app/tools/meta_txthread/meta_txthread_test
+
+build app/tools/meta_txthread/meta_txthread_test: CXX_EXECUTABLE_LINKER__meta_txthread_test app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/main_meta_txthread.cpp.o app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/__/__/threads/Meta_TxThread.cpp.o | app/components/libcomponents.a app/ipc/libipc.a /usr/local/lib/libopencv_core.so.4.5.2 /usr/local/lib/libopencv_gapi.so.4.5.2 /usr/local/lib/libopencv_stitching.so.4.5.2 /usr/local/lib/libopencv_aruco.so.4.5.2 /usr/local/lib/libopencv_bgsegm.so.4.5.2 /usr/local/lib/libopencv_bioinspired.so.4.5.2 /usr/local/lib/libopencv_ccalib.so.4.5.2 /usr/local/lib/libopencv_dnn_objdetect.so.4.5.2 /usr/local/lib/libopencv_dnn_superres.so.4.5.2 /usr/local/lib/libopencv_dpm.so.4.5.2 /usr/local/lib/libopencv_face.so.4.5.2 /usr/local/lib/libopencv_freetype.so.4.5.2 /usr/local/lib/libopencv_fuzzy.so.4.5.2 /usr/local/lib/libopencv_hfs.so.4.5.2 /usr/local/lib/libopencv_img_hash.so.4.5.2 /usr/local/lib/libopencv_intensity_transform.so.4.5.2 /usr/local/lib/libopencv_line_descriptor.so.4.5.2 /usr/local/lib/libopencv_mcc.so.4.5.2 /usr/local/lib/libopencv_quality.so.4.5.2 /usr/local/lib/libopencv_rapid.so.4.5.2 /usr/local/lib/libopencv_reg.so.4.5.2 /usr/local/lib/libopencv_rgbd.so.4.5.2 /usr/local/lib/libopencv_saliency.so.4.5.2 /usr/local/lib/libopencv_stereo.so.4.5.2 /usr/local/lib/libopencv_structured_light.so.4.5.2 /usr/local/lib/libopencv_phase_unwrapping.so.4.5.2 /usr/local/lib/libopencv_superres.so.4.5.2 /usr/local/lib/libopencv_optflow.so.4.5.2 /usr/local/lib/libopencv_surface_matching.so.4.5.2 /usr/local/lib/libopencv_tracking.so.4.5.2 /usr/local/lib/libopencv_highgui.so.4.5.2 /usr/local/lib/libopencv_datasets.so.4.5.2 /usr/local/lib/libopencv_plot.so.4.5.2 /usr/local/lib/libopencv_text.so.4.5.2 /usr/local/lib/libopencv_videostab.so.4.5.2 /usr/local/lib/libopencv_videoio.so.4.5.2 /usr/local/lib/libopencv_wechat_qrcode.so.4.5.2 /usr/local/lib/libopencv_xfeatures2d.so.4.5.2 /usr/local/lib/libopencv_ml.so.4.5.2 /usr/local/lib/libopencv_shape.so.4.5.2 /usr/local/lib/libopencv_ximgproc.so.4.5.2 /usr/local/lib/libopencv_video.so.4.5.2 /usr/local/lib/libopencv_dnn.so.4.5.2 /usr/local/lib/libopencv_xobjdetect.so.4.5.2 /usr/local/lib/libopencv_imgcodecs.so.4.5.2 /usr/local/lib/libopencv_objdetect.so.4.5.2 /usr/local/lib/libopencv_calib3d.so.4.5.2 /usr/local/lib/libopencv_features2d.so.4.5.2 /usr/local/lib/libopencv_flann.so.4.5.2 /usr/local/lib/libopencv_xphoto.so.4.5.2 /usr/local/lib/libopencv_photo.so.4.5.2 /usr/local/lib/libopencv_imgproc.so.4.5.2 /usr/local/lib/libopencv_core.so.4.5.2 || app/components/libcomponents.a app/ipc/libipc.a
+  FLAGS = -g
+  LINK_LIBRARIES = -Wl,-rpath,/usr/local/lib  app/components/libcomponents.a  app/ipc/libipc.a  -lopencv_core  -lopencv_imgproc  -lopencv_highgui  -lopencv_imgcodecs  -lopencv_video  -lopencv_tracking  -lpthread  /usr/local/lib/libopencv_core.so.4.5.2  -lpthread  /usr/local/lib/libopencv_gapi.so.4.5.2  /usr/local/lib/libopencv_stitching.so.4.5.2  /usr/local/lib/libopencv_aruco.so.4.5.2  /usr/local/lib/libopencv_bgsegm.so.4.5.2  /usr/local/lib/libopencv_bioinspired.so.4.5.2  /usr/local/lib/libopencv_ccalib.so.4.5.2  /usr/local/lib/libopencv_dnn_objdetect.so.4.5.2  /usr/local/lib/libopencv_dnn_superres.so.4.5.2  /usr/local/lib/libopencv_dpm.so.4.5.2  /usr/local/lib/libopencv_face.so.4.5.2  /usr/local/lib/libopencv_freetype.so.4.5.2  /usr/local/lib/libopencv_fuzzy.so.4.5.2  /usr/local/lib/libopencv_hfs.so.4.5.2  /usr/local/lib/libopencv_img_hash.so.4.5.2  /usr/local/lib/libopencv_intensity_transform.so.4.5.2  /usr/local/lib/libopencv_line_descriptor.so.4.5.2  /usr/local/lib/libopencv_mcc.so.4.5.2  /usr/local/lib/libopencv_quality.so.4.5.2  /usr/local/lib/libopencv_rapid.so.4.5.2  /usr/local/lib/libopencv_reg.so.4.5.2  /usr/local/lib/libopencv_rgbd.so.4.5.2  /usr/local/lib/libopencv_saliency.so.4.5.2  /usr/local/lib/libopencv_stereo.so.4.5.2  /usr/local/lib/libopencv_structured_light.so.4.5.2  /usr/local/lib/libopencv_phase_unwrapping.so.4.5.2  /usr/local/lib/libopencv_superres.so.4.5.2  /usr/local/lib/libopencv_optflow.so.4.5.2  /usr/local/lib/libopencv_surface_matching.so.4.5.2  /usr/local/lib/libopencv_tracking.so.4.5.2  /usr/local/lib/libopencv_highgui.so.4.5.2  /usr/local/lib/libopencv_datasets.so.4.5.2  /usr/local/lib/libopencv_plot.so.4.5.2  /usr/local/lib/libopencv_text.so.4.5.2  /usr/local/lib/libopencv_videostab.so.4.5.2  /usr/local/lib/libopencv_videoio.so.4.5.2  /usr/local/lib/libopencv_wechat_qrcode.so.4.5.2  /usr/local/lib/libopencv_xfeatures2d.so.4.5.2  /usr/local/lib/libopencv_ml.so.4.5.2  /usr/local/lib/libopencv_shape.so.4.5.2  /usr/local/lib/libopencv_ximgproc.so.4.5.2  /usr/local/lib/libopencv_video.so.4.5.2  /usr/local/lib/libopencv_dnn.so.4.5.2  /usr/local/lib/libopencv_xobjdetect.so.4.5.2  /usr/local/lib/libopencv_imgcodecs.so.4.5.2  /usr/local/lib/libopencv_objdetect.so.4.5.2  /usr/local/lib/libopencv_calib3d.so.4.5.2  /usr/local/lib/libopencv_features2d.so.4.5.2  /usr/local/lib/libopencv_flann.so.4.5.2  /usr/local/lib/libopencv_xphoto.so.4.5.2  /usr/local/lib/libopencv_photo.so.4.5.2  /usr/local/lib/libopencv_imgproc.so.4.5.2  /usr/local/lib/libopencv_core.so.4.5.2
+  OBJECT_DIR = app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir
+  POST_BUILD = :
+  PRE_LINK = :
+  TARGET_FILE = app/tools/meta_txthread/meta_txthread_test
+  TARGET_PDB = meta_txthread_test.dbg
+
+# =============================================================================
 # Target aliases.
 
 build components: phony app/components/libcomponents.a
@@ -503,6 +571,8 @@ build libcomponents.a: phony app/components/libcomponents.a
 build libipc.a: phony app/ipc/libipc.a
 
 build libthreads.a: phony app/threads/libthreads.a
+
+build meta_txthread_test: phony app/tools/meta_txthread/meta_txthread_test
 
 build threads: phony app/threads/libthreads.a
 
@@ -549,7 +619,7 @@ build app/threads/all: phony app/threads/libthreads.a
 #############################################
 # Folder: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools
 
-build app/tools/all: phony app/tools/ir_trackthread/all
+build app/tools/all: phony app/tools/ir_trackthread/all app/tools/meta_txthread/all
 
 # =============================================================================
 
@@ -557,6 +627,13 @@ build app/tools/all: phony app/tools/ir_trackthread/all
 # Folder: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread
 
 build app/tools/ir_trackthread/all: phony app/tools/ir_trackthread/ir_thread_gui
+
+# =============================================================================
+
+#############################################
+# Folder: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/meta_txthread
+
+build app/tools/meta_txthread/all: phony app/tools/meta_txthread/meta_txthread_test
 
 # =============================================================================
 # Built-in targets
@@ -584,14 +661,14 @@ build /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMak
 #############################################
 # Re-run CMake if any of its inputs changed.
 
-build build.ninja: RERUN_CMAKE /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/cmake.verify_globs | ../../CMakeLists.txt ../../app/CMakeLists.txt ../../app/components/CMakeLists.txt ../../app/ipc/CMakeLists.txt ../../app/threads/CMakeLists.txt ../../app/tools/CMakeLists.txt ../../app/tools/ir_trackthread/CMakeLists.txt /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/VerifyGlobs.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig-version.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig.cmake /usr/local/lib/cmake/opencv4/OpenCVModules-release.cmake /usr/local/lib/cmake/opencv4/OpenCVModules.cmake /usr/share/cmake-3.16/Modules/CMakeCXXInformation.cmake /usr/share/cmake-3.16/Modules/CMakeCheckCompilerFlagCommonPatterns.cmake /usr/share/cmake-3.16/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake-3.16/Modules/CMakeGenericSystem.cmake /usr/share/cmake-3.16/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake-3.16/Modules/CMakeLanguageInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake-3.16/Modules/CheckCXXSourceCompiles.cmake /usr/share/cmake-3.16/Modules/CheckIncludeFileCXX.cmake /usr/share/cmake-3.16/Modules/CheckLibraryExists.cmake /usr/share/cmake-3.16/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU.cmake /usr/share/cmake-3.16/Modules/FindPackageHandleStandardArgs.cmake /usr/share/cmake-3.16/Modules/FindPackageMessage.cmake /usr/share/cmake-3.16/Modules/FindThreads.cmake /usr/share/cmake-3.16/Modules/Internal/CMakeCheckCompilerFlag.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU.cmake /usr/share/cmake-3.16/Modules/Platform/Linux.cmake /usr/share/cmake-3.16/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/3.16.3/CMakeCXXCompiler.cmake CMakeFiles/3.16.3/CMakeSystem.cmake
+build build.ninja: RERUN_CMAKE /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/cmake.verify_globs | ../../CMakeLists.txt ../../app/CMakeLists.txt ../../app/components/CMakeLists.txt ../../app/ipc/CMakeLists.txt ../../app/threads/CMakeLists.txt ../../app/tools/CMakeLists.txt ../../app/tools/ir_trackthread/CMakeLists.txt ../../app/tools/meta_txthread/CMakeLists.txt /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/VerifyGlobs.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig-version.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig.cmake /usr/local/lib/cmake/opencv4/OpenCVModules-release.cmake /usr/local/lib/cmake/opencv4/OpenCVModules.cmake /usr/share/cmake-3.16/Modules/CMakeCXXInformation.cmake /usr/share/cmake-3.16/Modules/CMakeCheckCompilerFlagCommonPatterns.cmake /usr/share/cmake-3.16/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake-3.16/Modules/CMakeGenericSystem.cmake /usr/share/cmake-3.16/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake-3.16/Modules/CMakeLanguageInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake-3.16/Modules/CheckCXXSourceCompiles.cmake /usr/share/cmake-3.16/Modules/CheckIncludeFileCXX.cmake /usr/share/cmake-3.16/Modules/CheckLibraryExists.cmake /usr/share/cmake-3.16/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU.cmake /usr/share/cmake-3.16/Modules/FindPackageHandleStandardArgs.cmake /usr/share/cmake-3.16/Modules/FindPackageMessage.cmake /usr/share/cmake-3.16/Modules/FindThreads.cmake /usr/share/cmake-3.16/Modules/Internal/CMakeCheckCompilerFlag.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU.cmake /usr/share/cmake-3.16/Modules/Platform/Linux.cmake /usr/share/cmake-3.16/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/3.16.3/CMakeCXXCompiler.cmake CMakeFiles/3.16.3/CMakeSystem.cmake
   pool = console
 
 
 #############################################
 # A missing CMake input file is not an error.
 
-build ../../CMakeLists.txt ../../app/CMakeLists.txt ../../app/components/CMakeLists.txt ../../app/ipc/CMakeLists.txt ../../app/threads/CMakeLists.txt ../../app/tools/CMakeLists.txt ../../app/tools/ir_trackthread/CMakeLists.txt /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/VerifyGlobs.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig-version.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig.cmake /usr/local/lib/cmake/opencv4/OpenCVModules-release.cmake /usr/local/lib/cmake/opencv4/OpenCVModules.cmake /usr/share/cmake-3.16/Modules/CMakeCXXInformation.cmake /usr/share/cmake-3.16/Modules/CMakeCheckCompilerFlagCommonPatterns.cmake /usr/share/cmake-3.16/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake-3.16/Modules/CMakeGenericSystem.cmake /usr/share/cmake-3.16/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake-3.16/Modules/CMakeLanguageInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake-3.16/Modules/CheckCXXSourceCompiles.cmake /usr/share/cmake-3.16/Modules/CheckIncludeFileCXX.cmake /usr/share/cmake-3.16/Modules/CheckLibraryExists.cmake /usr/share/cmake-3.16/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU.cmake /usr/share/cmake-3.16/Modules/FindPackageHandleStandardArgs.cmake /usr/share/cmake-3.16/Modules/FindPackageMessage.cmake /usr/share/cmake-3.16/Modules/FindThreads.cmake /usr/share/cmake-3.16/Modules/Internal/CMakeCheckCompilerFlag.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU.cmake /usr/share/cmake-3.16/Modules/Platform/Linux.cmake /usr/share/cmake-3.16/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/3.16.3/CMakeCXXCompiler.cmake CMakeFiles/3.16.3/CMakeSystem.cmake: phony
+build ../../CMakeLists.txt ../../app/CMakeLists.txt ../../app/components/CMakeLists.txt ../../app/ipc/CMakeLists.txt ../../app/threads/CMakeLists.txt ../../app/tools/CMakeLists.txt ../../app/tools/ir_trackthread/CMakeLists.txt ../../app/tools/meta_txthread/CMakeLists.txt /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/VerifyGlobs.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig-version.cmake /usr/local/lib/cmake/opencv4/OpenCVConfig.cmake /usr/local/lib/cmake/opencv4/OpenCVModules-release.cmake /usr/local/lib/cmake/opencv4/OpenCVModules.cmake /usr/share/cmake-3.16/Modules/CMakeCXXInformation.cmake /usr/share/cmake-3.16/Modules/CMakeCheckCompilerFlagCommonPatterns.cmake /usr/share/cmake-3.16/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake-3.16/Modules/CMakeGenericSystem.cmake /usr/share/cmake-3.16/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake-3.16/Modules/CMakeLanguageInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake-3.16/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake-3.16/Modules/CheckCXXSourceCompiles.cmake /usr/share/cmake-3.16/Modules/CheckIncludeFileCXX.cmake /usr/share/cmake-3.16/Modules/CheckLibraryExists.cmake /usr/share/cmake-3.16/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Compiler/GNU.cmake /usr/share/cmake-3.16/Modules/FindPackageHandleStandardArgs.cmake /usr/share/cmake-3.16/Modules/FindPackageMessage.cmake /usr/share/cmake-3.16/Modules/FindThreads.cmake /usr/share/cmake-3.16/Modules/Internal/CMakeCheckCompilerFlag.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake-3.16/Modules/Platform/Linux-GNU.cmake /usr/share/cmake-3.16/Modules/Platform/Linux.cmake /usr/share/cmake-3.16/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/3.16.3/CMakeCXXCompiler.cmake CMakeFiles/3.16.3/CMakeSystem.cmake: phony
 
 
 #############################################

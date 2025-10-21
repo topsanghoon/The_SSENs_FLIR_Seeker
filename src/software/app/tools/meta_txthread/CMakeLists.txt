@@ -1,6 +1,5 @@
-# src/software/app/tools/ir_thread/CMakeLists.txt
 add_executable(meta_txthread_test 
-  meta_txthread_test.cpp
+  main_meta_txthread.cpp
   ../../threads/Meta_TxThread.cpp   # ← 필요한 스레드 소스만 직접 포함
 )
 

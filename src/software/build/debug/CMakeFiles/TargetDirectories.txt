@@ -16,3 +16,6 @@
 /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread/CMakeFiles/rebuild_cache.dir
 /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread/CMakeFiles/edit_cache.dir
 /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread/CMakeFiles/ir_thread_gui.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/meta_txthread/CMakeFiles/rebuild_cache.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/meta_txthread/CMakeFiles/edit_cache.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir

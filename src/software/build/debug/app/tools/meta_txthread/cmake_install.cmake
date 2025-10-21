@@ -1,4 +1,4 @@
-# Install script for directory: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools
+# Install script for directory: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/meta_txthread
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -35,15 +35,5 @@ endif()
 # Is this installation the result of a crosscompile?
 if(NOT DEFINED CMAKE_CROSSCOMPILING)
   set(CMAKE_CROSSCOMPILING "FALSE")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread/cmake_install.cmake")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/meta_txthread/cmake_install.cmake")
 endif()
 
