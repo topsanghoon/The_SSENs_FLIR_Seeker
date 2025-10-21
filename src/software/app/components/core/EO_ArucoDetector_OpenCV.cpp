@@ -25,7 +25,8 @@ EO_ArucoDetector_OpenCV::detect(const cv::Mat& pf_gray8) {
         if (c.size() != 4) continue;
 
         // bounding rect 계산
-        cv::Rect2f r = cv::boundingRect(c);
+        //cv::Rect2f r = cv::boundingRect(c);
+        cv::Rect2f r;
 
         Detection d;
         d.id = ids[i];

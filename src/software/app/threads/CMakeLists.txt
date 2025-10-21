@@ -7,10 +7,8 @@ add_library(threads STATIC ${THREADS_SRC})
 target_include_directories(threads
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/..
-    # ${CMAKE_CURRENT_SOURCE_DIR}/../components/includes
-    # ${CMAKE_CURRENT_SOURCE_DIR}/../ipc
   PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/
 )
 
 target_link_libraries(threads

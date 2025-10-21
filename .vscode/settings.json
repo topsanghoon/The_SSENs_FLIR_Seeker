@@ -72,6 +72,12 @@
     "sstream": "cpp",
     "stdexcept": "cpp",
     "streambuf": "cpp",
-    "typeinfo": "cpp"
+    "typeinfo": "cpp",
+    "filesystem": "cpp",
+    "codecvt": "cpp",
+    "list": "cpp",
+    "map": "cpp",
+    "set": "cpp",
+    "iomanip": "cpp"
   }
 }

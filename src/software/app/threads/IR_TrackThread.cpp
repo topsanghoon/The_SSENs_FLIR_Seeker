@@ -8,7 +8,7 @@ namespace flir {
 static std::mutex              g_m;
 static std::condition_variable g_cv;
 
-IR_TrackThread::IR_TrackThread(SpscMailbox<IRFrameHandle>& ir_mb,
+IR_TrackThread::IR_TrackThread(SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_mb,
                                SpscMailbox<UserCmd>&     click_mb,
                                ITrackerStrategy&         tracker,
                                IPreprocessor&            preproc,
@@ -40,40 +40,36 @@ void IR_TrackThread::join() {
     if (th_.joinable()) th_.join();
 }
 
-void IR_TrackThread::onClickArrived(const UserCmd& cmd) {
-    click_mb_.push(cmd);
-    g_cv.notify_one(); // run()을 깨우는 신호
+void IR_TrackThread::onFrameArrived(std::shared_ptr<IRFrameHandle> h) {
+    ir_mb_.push(std::move(h));
+    g_cv.notify_one();
 }
 
-void IR_TrackThread::onFrameArrived(IRFrameHandle h) {
-    ir_mb_.push(h);
-    g_cv.notify_one(); // run()을 깨우는 신호
+void IR_TrackThread::onClickArrived(const UserCmd& cmd) {
+    click_mb_.push(cmd);
+    g_cv.notify_one(); // 대기 중이면 깨움
 }
 
 void IR_TrackThread::run() {
-    
     while (running_.load()) {
         wait_until_ready();
         if (!running_.load()) break;
 
-        // CLICK 우선 흡수(초기화는 다음 프레임에서)
         if (click_mb_.has_new(click_seq_seen_)) {
             if (auto cmd = click_mb_.exchange(nullptr)) {
                 handle_click(*cmd);
             }
         }
-
-        // 프레임이 없으면 다음 대기
         if (!ir_mb_.has_new(frame_seq_seen_)) continue;
 
-        // 프레임 소비 및 처리
-        if (auto h = ir_mb_.exchange(nullptr)) {
-            IRFrameHandle fh = *h; // (필요 시 이동)
-            on_frame(fh);        // 전처리 → init/update → 이벤트 발행/로깅
-            fh.release();        // 사용 후 반환
+        if (auto hopt = ir_mb_.exchange(nullptr)) {
+            std::shared_ptr<IRFrameHandle> h = *hopt; // ★ 파생형 유지
+            if (h) {
+                on_frame(*h);     // 참조로 넘김 → 가상함수/동적타입 유지
+                h->release();     // 파생형의 release() 호출 가능
+            }
         }
     }
-
     cleanup();
 }
 
@@ -100,8 +96,7 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
 
     cv::Mat pf32;
     double ms = 0;
-    { ScopedTimer t(ms);
-      preproc_.run(*h.p, pf32); }
+    { ScopedTimer t(ms); preproc_.run(*h.p, pf32); }
 
     if (new_target_) {
         if (try_init(pf32, target_box_)) {

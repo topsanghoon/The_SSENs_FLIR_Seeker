@@ -62,7 +62,7 @@ struct IRTrackConfig {
 // ---------- 스레드 본체 ----------
 class IR_TrackThread {
 public:
-    IR_TrackThread(SpscMailbox<IRFrameHandle>& ir_mb,
+    IR_TrackThread(SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_mb,
                    SpscMailbox<UserCmd>&     click_mb,
                    ITrackerStrategy&         tracker,
                    IPreprocessor&            preproc,
@@ -78,11 +78,11 @@ public:
 
     // 생산자(선택 경로): 직접 주입 + 깨움
     void onClickArrived(const UserCmd& cmd);
-    void onFrameArrived(IRFrameHandle h);
+    void onFrameArrived(std::shared_ptr<IRFrameHandle> h);
 
 private:
     // === 협력자 / 구성 ===
-    SpscMailbox<IRFrameHandle>& ir_mb_;
+    SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_mb_;
     SpscMailbox<UserCmd>&     click_mb_;
     ITrackerStrategy&         tracker_;
     IPreprocessor&            preproc_;
@@ -114,7 +114,7 @@ private:
     void emit_track(const cv::Rect2f& b, float score, uint64_t ts);
     void emit_lost(const cv::Rect2f& last, uint64_t ts);
     void emit_need_reselect();
-    void IR_TrackThread::cleanup();
+    void cleanup();
 };
 
 } // namespace flir

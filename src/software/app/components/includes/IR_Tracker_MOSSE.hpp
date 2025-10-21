@@ -1,6 +1,7 @@
 // src/software/app/components/includes/IR_Tracker_MOSSE.hpp
 #pragma once
 #include <opencv2/core.hpp>
+#include <opencv2/tracking.hpp>
 #include <opencv2/tracking/tracking_legacy.hpp>
 #include "threads_includes/IR_TrackThread.hpp"
 

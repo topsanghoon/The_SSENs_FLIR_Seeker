@@ -135,5 +135,23 @@
   "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
   "command": "/usr/bin/c++   -I../../app/threads/.. -I../../app/threads -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/threads/CMakeFiles/threads.dir/Net_RxThread.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/Net_RxThread.cpp",
   "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/Net_RxThread.cpp"
+},
+
+{
+  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++   -I../../app/tests/.. -I../../app/threads/.. -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tests/CMakeFiles/ir_trackthread_sanity.dir/IR_TrackThread_sanity.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tests/IR_TrackThread_sanity.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tests/IR_TrackThread_sanity.cpp"
+},
+
+{
+  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++   -I../../app/tools/ir_thread/.. -I../../app/tools/ir_thread/../../threads_includes -I../../app/tools/ir_thread/../../components/includes -I../../app/tools/ir_thread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/ir_thread/CMakeFiles/ir_thread_gui.dir/ir_thread_gui.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_thread/ir_thread_gui.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_thread/ir_thread_gui.cpp"
+},
+
+{
+  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++   -I../../app/tools/ir_thread/.. -I../../app/tools/ir_thread/../../threads_includes -I../../app/tools/ir_thread/../../components/includes -I../../app/tools/ir_thread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/ir_thread/CMakeFiles/ir_thread_gui.dir/__/__/threads/IR_TrackThread.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp"
 }
 ]
