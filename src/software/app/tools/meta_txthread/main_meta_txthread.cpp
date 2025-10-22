@@ -1,17 +1,10 @@
+// main_meta_txthread.cpp (헤더 기본값 100% 사용)
 #include <atomic>
 #include <chrono>
 #include <csignal>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <iostream>
 #include <thread>
-#include <vector>
-
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include <iostream>
 
 #include <opencv2/core.hpp>
 
@@ -25,11 +18,10 @@ using namespace std::chrono_literals;
 static std::atomic<bool> g_run{true};
 static void on_sigint(int){ g_run.store(false); }
 
-// ---- LocalEventBus: push만 구현하면 OK ----
+// 최소 EventBus: push만
 class LocalEventBus final : public flir::IEventBus {
 public:
     struct Sub { flir::Topic topic; flir::SpscMailbox<flir::Event>* mb{}; flir::WakeHandle* wh{}; };
-
     void subscribe(flir::Topic t, flir::SpscMailbox<flir::Event>* inbox, flir::WakeHandle* wake) override {
         subs_.push_back({t, inbox, wake});
     }
@@ -40,8 +32,7 @@ public:
     void push(const flir::Event& e, flir::Topic t) override {
         for (auto& s : subs_) {
             if (s.topic != t) continue;
-            auto ev_copy = e;
-            s.mb->push(std::move(ev_copy));     // ★ 프로듀서 API
+            auto copy = e; s.mb->push(std::move(copy));
             if (s.wh) s.wh->signal();
             break;
         }
@@ -50,44 +41,23 @@ private:
     std::vector<Sub> subs_;
 };
 
-static bool make_sockaddr_ipv4(const char* ip, uint16_t port, sockaddr_storage& ss, socklen_t& sl) {
-    sockaddr_in sa{}; sa.sin_family = AF_INET; sa.sin_port = htons(port);
-    if (::inet_pton(AF_INET, ip, &sa.sin_addr) != 1) return false;
-    std::memset(&ss, 0, sizeof(ss));
-    std::memcpy(&ss, &sa, sizeof(sa));
-    sl = sizeof(sa);
-    return true;
-}
-
-int main(int argc, char** argv) {
+int main() {
     std::signal(SIGINT, on_sigint);
-    if (argc < 3) {
-        std::cerr << "사용법: " << argv[0] << " <WIN_IPv4> <PORT>\n";
-        return 1;
-    }
-    const char* target_ip = argv[1];
-    uint16_t target_port = static_cast<uint16_t>(std::stoi(argv[2]));
-
-    int sock_meta = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock_meta < 0) { perror("socket"); return 2; }
-
-    sockaddr_storage sa{}; socklen_t sl = 0;
-    if (!make_sockaddr_ipv4(target_ip, target_port, sa, sl)) {
-        std::cerr << "IP 주소 파싱 실패\n"; return 3;
-    }
 
     LocalEventBus bus;
-    flir::MetaTxConfig cfg{}; cfg.hb_period_ms = 500;
-    flir::MetaFds fds{}; fds.sock_meta = sock_meta;
+
+    // ★ 헤더 기본값만 사용
+    flir::MetaTxConfig cfg{};   // remote_ip, remote_port, local_port 전부 헤더의 default
+    flir::MetaFds fds{};        // sock_meta=-1 → 내부 생성 사용
 
     flir::Meta_TxThread tx(bus, cfg, fds);
-    tx.set_meta_target(reinterpret_cast<sockaddr*>(&sa), sl);
     tx.start();
 
-    std::cout << "[meta_txthread_test] start → " << target_ip << ":" << target_port << "\n";
+    std::cout << "[meta_txthread_test] start (using MetaTxConfig defaults)\n"
+              << "Ctrl+C로 종료. HB + 샘플 Track/Aruco/Ctrl 전송.\n";
 
     uint32_t seq = 0;
-    uint64_t t0_ns = []{
+    const uint64_t t0_ns = []{
         using namespace std::chrono;
         return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
     }();
@@ -97,21 +67,19 @@ int main(int argc, char** argv) {
         {
             flir::TrackEvent tev{};
             tev.frame_seq = ++seq;
-            tev.ts = t0_ns + seq * 20'000'000ULL;
+            tev.ts = t0_ns + seq * 20'000'000ULL; // 20ms 간격
             float x = 10.f + (seq % 100);
             float y = 20.f + ((seq*3) % 60);
-            tev.box = cv::Rect2f{x, y, 40.f, 30.f};
+            tev.box   = cv::Rect2f{x, y, 40.f, 30.f};
             tev.score = 0.7f + 0.3f * ((seq % 10) / 10.0f);
 
             flir::Event e{};
             e.type = flir::EventType::Track;
             e.payload = tev;
             bus.push(e, flir::Topic::Tracking);
-
-            std::cout << "[push] Track seq=" << tev.frame_seq << " ts=" << tev.ts << "\n";
         }
 
-        // ArUco
+        // ArUco (가끔)
         if ((seq % 15) == 0) {
             flir::ArucoEvent a{};
             a.ts = t0_ns + seq * 20'000'000ULL;
@@ -122,22 +90,19 @@ int main(int argc, char** argv) {
             e.type = flir::EventType::Aruco;
             e.payload = a;
             bus.push(e, flir::Topic::Aruco);
-
-            std::cout << "[push] Aruco id=" << a.id << " ts=" << a.ts << "\n";
         }
 
-        // MetaCtrl
+        // MetaCtrl (가끔)
         if ((seq % 30) == 0) {
             flir::MetaCtrlEvent c{};
-            c.ts = t0_ns + seq * 20'000'000ULL;
+            c.ts  = t0_ns + seq * 20'000'000ULL;
             c.cmd = (seq/30) % 3;
+            std::cout << c.ts << "\n";
 
             flir::Event e{};
             e.type = flir::EventType::MetaCtrl;
             e.payload = c;
             bus.push(e, flir::Topic::Control);
-
-            std::cout << "[push] Ctrl cmd=" << c.cmd << " ts=" << c.ts << "\n";
         }
 
         std::this_thread::sleep_for(100ms);
@@ -145,6 +110,5 @@ int main(int argc, char** argv) {
 
     tx.stop();
     tx.join();
-    ::close(sock_meta);
     return 0;
 }

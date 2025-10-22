@@ -21,9 +21,15 @@ struct LatestTrack { cv::Rect2f box{}; float score=0.f; uint64_t ts=0; uint32_t 
 struct LatestAruco { int id=-1; cv::Rect2f box{}; uint64_t ts=0; };
 struct LatestCtrl  { int state=0; int last_cmd=0; uint64_t ts=0; };
 
+
 struct MetaTxConfig {
-    int hb_period_ms = 200;    // 하트비트 주기
+    int  hb_period_ms    = 200;
+    uint16_t local_port  = 56060;        // 0=임의 포트, 그 외=고정 바인드
+    char remote_ip[64]   = "192.168.2.191";
+    uint16_t remote_port = 56060;        // 필수
+    int  sndbuf_bytes    = 256*1024; // 선택
 };
+
 
 // EPOLL로 기다릴 fd 핸들 모음(주입 또는 내부 생성)
 struct MetaFds {
@@ -36,7 +42,7 @@ struct MetaFds {
 class Meta_TxThread {
 public:
     Meta_TxThread(IEventBus& bus,            // 이벤트 버스(구독)
-                  MetaTxConfig cfg = {},
+                  MetaTxConfig cfg = MetaTxConfig{},
                   MetaFds fds = {});         // fds 직접 주입 가능(없으면 내부 생성)
 
     // 수명 제어
@@ -58,6 +64,8 @@ private:
     bool own_epfd_{false};
     bool own_efd_{false};
     bool own_tfd_{false};
+
+    bool own_sock_{false};
 
     // 상태
     std::thread              th_;

@@ -1,0 +1,224 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "app",
+					"childIndexes" : 
+					[
+						2,
+						3,
+						4,
+						5
+					],
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "app"
+				},
+				{
+					"build" : "app/ipc",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "app/ipc",
+					"targetIndexes" : 
+					[
+						2
+					]
+				},
+				{
+					"build" : "app/components",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "app/components",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "app/threads",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "app/threads",
+					"targetIndexes" : 
+					[
+						5
+					]
+				},
+				{
+					"build" : "app/tools",
+					"childIndexes" : 
+					[
+						6,
+						7,
+						8
+					],
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "app/tools"
+				},
+				{
+					"build" : "app/tools/ir_trackthread",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 5,
+					"projectIndex" : 0,
+					"source" : "app/tools/ir_trackthread",
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"build" : "app/tools/meta_txthread",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 5,
+					"projectIndex" : 0,
+					"source" : "app/tools/meta_txthread",
+					"targetIndexes" : 
+					[
+						4
+					]
+				},
+				{
+					"build" : "app/tools/controlthread",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 5,
+					"projectIndex" : 0,
+					"source" : "app/tools/controlthread",
+					"targetIndexes" : 
+					[
+						1
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8
+					],
+					"name" : "AGM850",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 3,
+					"id" : "components::@2a3d43a2e823b798d751",
+					"jsonFile" : "target-components-Debug-562ef24344f3ef9443da.json",
+					"name" : "components",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 8,
+					"id" : "control_test::@17f52fbe33ec6853fda6",
+					"jsonFile" : "target-control_test-Debug-f9751a52bab6f1f8ccec.json",
+					"name" : "control_test",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "ipc::@ef3dc89c71337de3085b",
+					"jsonFile" : "target-ipc-Debug-258c52b17f9505ee621f.json",
+					"name" : "ipc",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "ir_thread_gui::@f79493215d9f428bd804",
+					"jsonFile" : "target-ir_thread_gui-Debug-98db5c7f2cc4161ee4a0.json",
+					"name" : "ir_thread_gui",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 7,
+					"id" : "meta_txthread_test::@47031114e49e28d2bbc4",
+					"jsonFile" : "target-meta_txthread_test-Debug-0aec085ea7208e5deb26.json",
+					"name" : "meta_txthread_test",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 4,
+					"id" : "threads::@b3bb3d619fd98715b6fc",
+					"jsonFile" : "target-threads-Debug-ac80ba6215802053045a.json",
+					"name" : "threads",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+		"source" : "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 0
+	}
+}

@@ -16,7 +16,7 @@
 // === Thread 파이프라인에서 쓰는 인터페이스/타입들 ===
 #include "threads_includes/IR_TrackThread.hpp"           // IR_TrackThread (소비자)
 #include "components/includes/IR_Frame.hpp"              // IRFrameHandle/IRFrame16
-#include "components/includes/IR_Preprocessor_LinNorm.hpp" // IPreprocessor 구현 (16U→32F)
+#include "components/includes/IR_Preprocessor.hpp" // IPreprocessor 구현 (16U→32F)
 #include "components/includes/IR_Tracker_MOSSE.hpp"      // ITrackerStrategy 구현 (MOSSE)
 #include "components/includes/CsvLoggerIR.hpp"           // CSV 로깅
 

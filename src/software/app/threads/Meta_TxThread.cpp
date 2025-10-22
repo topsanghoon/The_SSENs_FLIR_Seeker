@@ -8,6 +8,9 @@
 #include <cstring>
 #include <chrono>
 #include <cerrno>
+#include <arpa/inet.h>   // inet_pton (리눅스)
+#include <netinet/in.h>  // sockaddr_in
+#include <iostream>
 
 #include "ipc/event_bus.hpp"
 #include "ipc/ipc_types.hpp"
@@ -47,13 +50,29 @@ static inline itimerspec make_period_ms(int ms) {
     return its;
 }
 
+static bool make_sockaddr_ipv4(const char* ip, uint16_t port,
+                               sockaddr_storage& ss, socklen_t& sl) {
+    sockaddr_in sa{};
+    sa.sin_family = AF_INET;
+    sa.sin_port   = htons(port);
+    if (::inet_pton(AF_INET, ip, &sa.sin_addr) != 1) return false;
+    std::memset(&ss, 0, sizeof(ss));
+    std::memcpy(&ss, &sa, sizeof(sa));
+    sl = sizeof(sa);
+    return true;
+}
+
 // ---- ctor/lifecycle ----
 Meta_TxThread::Meta_TxThread(IEventBus& bus, MetaTxConfig cfg, MetaFds fds)
-: bus_(bus), cfg_(cfg), fds_(fds) {}
+: bus_(bus), 
+cfg_(cfg), 
+fds_(fds) 
+{}
 
 void Meta_TxThread::start() {
     running_.store(true);
 
+    // epoll/efd/tfd 생성 (기존 그대로)
     if (fds_.epfd < 0) { fds_.epfd = ::epoll_create1(EPOLL_CLOEXEC); own_epfd_ = true; }
     if (fds_.efd  < 0) { fds_.efd  = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); own_efd_ = true; }
     if (fds_.tfd  < 0) { fds_.tfd  = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC); own_tfd_ = true; }
@@ -66,7 +85,38 @@ void Meta_TxThread::start() {
     ev.data.fd = fds_.efd;  ::epoll_ctl(fds_.epfd, EPOLL_CTL_ADD, fds_.efd, &ev);
     ev.data.fd = fds_.tfd;  ::epoll_ctl(fds_.epfd, EPOLL_CTL_ADD, fds_.tfd, &ev);
 
-    // EVT_BUS 구독 (한 inbox로 받음) — 멤버 wake_ 사용
+    // ★ 1) 필요 시 소켓 생성/옵션/바인드
+    if (fds_.sock_meta < 0) {
+        int s = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+        if (s >= 0) {
+            if (cfg_.sndbuf_bytes > 0) {
+                int sz = cfg_.sndbuf_bytes;
+                (void)::setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sz, sizeof(sz));
+            }
+            if (cfg_.local_port != 0) {
+                sockaddr_in a{};
+                a.sin_family      = AF_INET;
+                a.sin_addr.s_addr = INADDR_ANY;
+                a.sin_port        = htons(cfg_.local_port);
+                (void)::bind(s, (sockaddr*)&a, sizeof(a)); // 실패해도 송신만 할거면 필수는 아님
+            }
+            fds_.sock_meta = s;
+            own_sock_ = true;
+        }
+        // else: 생성 실패 시에도 진행(하단 send_XXX에서 sock_meta < 0이면 skip)
+    }
+
+    // ★ 2) 목적지 설정(유효하면)
+    if (cfg_.remote_port != 0 && cfg_.remote_ip[0] != '\0') {
+        sockaddr_storage dst{}; socklen_t dlen = 0;
+        if (make_sockaddr_ipv4(cfg_.remote_ip, cfg_.remote_port, dst, dlen)) {
+            set_meta_target(reinterpret_cast<sockaddr*>(&dst), dlen);
+        } else {
+            // ip 파싱 실패 → set_meta_target 미설정(전송은 skip됨)
+        }
+    }
+
+    // EVT_BUS 구독 (기존 그대로)
     wake_ = std::make_unique<EfdWakeHandle>(fds_.efd);
     bus_.subscribe(Topic::Tracking, &inbox_, wake_.get());
     bus_.subscribe(Topic::Aruco,    &inbox_, wake_.get());
@@ -83,17 +133,24 @@ void Meta_TxThread::stop() {
     }
 }
 
+
 void Meta_TxThread::join() {
     if (th_.joinable()) th_.join();
     bus_.unsubscribe(&inbox_);
     wake_.reset();
 
-    // FD 정리(우리가 만들었을 때만)
     if (own_epfd_ && fds_.epfd >= 0) { ::close(fds_.epfd); fds_.epfd = -1; own_epfd_ = false; }
     if (own_efd_  && fds_.efd  >= 0) { ::close(fds_.efd ); fds_.efd  = -1; own_efd_  = false; }
     if (own_tfd_  && fds_.tfd  >= 0) { ::close(fds_.tfd ); fds_.tfd  = -1; own_tfd_  = false; }
-    // sock_meta는 외부 주입 소유로 간주(닫지 않음)
+
+    // ★ 우리가 만든 소켓만 닫기
+    if (own_sock_ && fds_.sock_meta >= 0) {
+        ::close(fds_.sock_meta);
+        fds_.sock_meta = -1;
+        own_sock_ = false;
+    }
 }
+
 
 void Meta_TxThread::set_meta_target(const struct sockaddr* sa, socklen_t slen) {
     ::memset(&sa_meta_, 0, sizeof(sa_meta_));
@@ -124,7 +181,7 @@ void Meta_TxThread::run() {
 // ---- 즉시 송신(코얼레스 없음) ----
 void Meta_TxThread::on_eventfd_ready() {
     drain_eventfd(fds_.efd);
-
+    std::cout << "send" << "\n";
     while (auto ev = inbox_.exchange(nullptr)) {
         switch (ev->type) {
             case EventType::Track: {

@@ -49,14 +49,8 @@
 
 {
   "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
-  "command": "/usr/bin/c++   -I../../app/components/.. -I../../app/components/core -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/components/CMakeFiles/components.dir/core/IController.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IController.cpp",
-  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IController.cpp"
-},
-
-{
-  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
-  "command": "/usr/bin/c++   -I../../app/components/.. -I../../app/components/core -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/components/CMakeFiles/components.dir/core/IR_Preprocessor_LinNorm.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Preprocessor_LinNorm.cpp",
-  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Preprocessor_LinNorm.cpp"
+  "command": "/usr/bin/c++   -I../../app/components/.. -I../../app/components/core -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/components/CMakeFiles/components.dir/core/IR_Preprocessor.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Preprocessor.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Preprocessor.cpp"
 },
 
 {
@@ -153,5 +147,17 @@
   "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
   "command": "/usr/bin/c++   -I../../app/tools/meta_txthread/.. -I../../app/tools/meta_txthread/../../threads_includes -I../../app/tools/meta_txthread/../../components/includes -I../../app/tools/meta_txthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/meta_txthread/CMakeFiles/meta_txthread_test.dir/__/__/threads/Meta_TxThread.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/Meta_TxThread.cpp",
   "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/Meta_TxThread.cpp"
+},
+
+{
+  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++   -I../../app/tools/controlthread/.. -I../../app/tools/controlthread/../../threads_includes -I../../app/tools/controlthread/../../components/includes -I../../app/tools/controlthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/controlthread/CMakeFiles/control_test.dir/main_control.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/controlthread/main_control.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/tools/controlthread/main_control.cpp"
+},
+
+{
+  "directory": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++   -I../../app/tools/controlthread/.. -I../../app/tools/controlthread/../../threads_includes -I../../app/tools/controlthread/../../components/includes -I../../app/tools/controlthread/../../ipc -I../../app/components/.. -I../../app/ipc/.. -isystem /usr/local/include/opencv4  -g   -Wall -Wextra -Wpedantic -std=gnu++17 -o app/tools/controlthread/CMakeFiles/control_test.dir/__/__/threads/ControlThread.cpp.o -c /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/ControlThread.cpp",
+  "file": "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/threads/ControlThread.cpp"
 }
 ]

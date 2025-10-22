@@ -103,7 +103,7 @@ private:
     void handle_click(const UserCmd& cmd);
     void on_frame(IRFrameHandle& h);
     bool try_init(const cv::Mat& pf, const cv::Rect2f& box);
-    bool try_update(const cv::Mat& pf, cv::Rect2f& out_box, float& score);
+    bool try_update(const cv::Mat& pf, cv::Rect2f& out_box, float& zz);
     void emit_init(const cv::Rect2f& b, uint64_t ts);
     void emit_track(const cv::Rect2f& b, float score, uint64_t ts);
     void emit_lost(const cv::Rect2f& last, uint64_t ts);
