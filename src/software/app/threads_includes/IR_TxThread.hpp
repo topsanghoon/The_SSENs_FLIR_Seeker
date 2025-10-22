@@ -29,11 +29,19 @@ public:
         int         fps = 9;                 // Lepton 3의 프레임 속도
     };
 
+    // Constructor with custom GStreamer configuration
     IR_TxThread(
         std::string name,
         SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb,
         const GstConfig& gst_config
     );
+    
+    // Constructor with default GStreamer configuration
+    IR_TxThread(
+        std::string name,
+        SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb
+    );
+    
     ~IR_TxThread();
 
     void start();

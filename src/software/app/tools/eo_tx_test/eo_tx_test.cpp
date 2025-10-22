@@ -80,17 +80,9 @@ int main(int argc, char** argv) {
     // [프레임 메일박스] (생산자: main 루프 / 소비자: EO_TxThread)
     flir::SpscMailbox<std::shared_ptr<flir::EOFrameHandle>> mb_frame(1);
 
-    // [GStreamer 설정] - 수신 PC의 IP 주소로 변경하세요!
-    flir::EO_TxThread::GstConfig gst_config;
-    gst_config.pc_ip = "192.168.0.179"; // 데이터를 수신할 PC의 IP
-    gst_config.port  = 5001;  // EO는 5001 포트 사용 (IR과 구분)
-    // V4L2 YUV 320x240 설정 (실제로는 샘플이 360x240이므로 그대로 사용)
-    gst_config.width  = 360;  // 샘플 이미지 크기에 맞춤
-    gst_config.height = 240;
-    gst_config.fps    = 30;
-
-    // [EO_TxThread 생성] - 소비자 스레드
-    flir::EO_TxThread tx_thread("EO_TX_Test_Thread", mb_frame, gst_config);
+    // [EO_TxThread 생성] - 소비자 스레드 (기본 GStreamer 설정 사용)
+    // 기본 설정: udp://192.168.0.179:5001, 360x240@30fps
+    flir::EO_TxThread tx_thread("EO_TX_Test_Thread", mb_frame);
 
     // [WakeHandle 생성] - 생산자가 소비자를 깨우기 위한 핸들
     auto wake_handle = tx_thread.create_wake_handle();
@@ -98,8 +90,7 @@ int main(int argc, char** argv) {
     // [소비자 스레드 시작]
     try {
         tx_thread.start();
-        std::cout << "[INFO] EO_TxThread started. Streaming to udp://" 
-                  << gst_config.pc_ip << ":" << gst_config.port << "\n";
+        std::cout << "[INFO] EO_TxThread started. Streaming to udp://192.168.0.179:5001\n";
     } catch (const std::runtime_error& e) {
         std::cerr << "[ERR] Failed to start EO_TxThread: " << e.what() << "\n";
         return 1;
@@ -110,7 +101,7 @@ int main(int argc, char** argv) {
     // ============================
     
     uint32_t seq = 1;
-    int target_fps = gst_config.fps;
+    int target_fps = 30; // EO 기본 FPS
     int period_ms = 1000 / std::max(1, target_fps);
 
     for (const auto& file_path : files) {

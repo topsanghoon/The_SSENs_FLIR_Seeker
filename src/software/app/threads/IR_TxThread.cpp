@@ -15,6 +15,13 @@ IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHa
       gst_config_(gst_config)
 {}
 
+// Default constructor using default GstConfig values
+IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb)
+    : name_(std::move(name)),
+      mb_(mb),
+      gst_config_(GstConfig{}) // Use default values
+{}
+
 // 소멸자: GStreamer 리소스 정리
 IR_TxThread::~IR_TxThread() {
     stop();

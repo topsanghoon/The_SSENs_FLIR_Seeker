@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
     signal(SIGTERM, signal_handler);
 
     // ★ 입력 프레임 소스(샘플 데이터 디렉토리)
-    std::string dir = "/home/user/project_dir/The_SSENs_FLIR_Seeker/data/FLIR_Sample";
+    std::string dir = "/home/user/THESSENS/The_SSENs_FLIR_Seeker/data/FLIR_Sample";
     if (argc >= 2) dir = argv[1];
 
     auto files = collect_tiffs(dir);
@@ -82,17 +82,9 @@ int main(int argc, char** argv) {
     // [프레임 메일박스] (생산자: main 루프 / 소비자: IR_TxThread)
     flir::SpscMailbox<std::shared_ptr<flir::IRFrameHandle>> mb_frame(1);
 
-    // [GStreamer 설정] - 수신 PC의 IP 주소로 변경하세요!
-    flir::IR_TxThread::GstConfig gst_config;
-    gst_config.pc_ip = "192.168.0.179"; // 데이터를 수신할 PC의 IP
-    gst_config.port  = 5000;
-    // Lepton 3/3.5 기본 해상도 및 프레임 속도
-    gst_config.width  = 160; 
-    gst_config.height = 120;
-    gst_config.fps    = 9;
-
-    // [IR_TxThread 생성] - 소비자 스레드
-    flir::IR_TxThread tx_thread("IR_TX_Test_Thread", mb_frame, gst_config);
+    // [IR_TxThread 생성] - 소비자 스레드 (기본 GStreamer 설정 사용)
+    // 기본 설정: udp://192.168.0.179:5000, 160x120@9fps
+    flir::IR_TxThread tx_thread("IR_TX_Test_Thread", mb_frame);
 
     // [WakeHandle 생성] - 생산자가 소비자를 깨우기 위한 핸들
     auto wake_handle = tx_thread.create_wake_handle();
@@ -100,19 +92,16 @@ int main(int argc, char** argv) {
     // [소비자 스레드 시작]
     try {
         tx_thread.start();
-        std::cout << "[INFO] IR_TxThread started. Streaming to udp://" 
-                  << gst_config.pc_ip << ":" << gst_config.port << "\n";
+        std::cout << "[INFO] IR_TxThread started. Streaming to udp://192.168.0.179:5000\n";
     } catch (const std::runtime_error& e) {
         std::cerr << "[ERR] Failed to start IR_TxThread: " << e.what() << "\n";
         return 1;
-    }
-
-    // ============================
+    }    // ============================
     //  프레임 생산 및 전송 루프
     // ============================
     
     uint32_t seq = 1;
-    int target_fps = gst_config.fps;
+    int target_fps = 9; // IR 기본 FPS
     int period_ms = 1000 / std::max(1, target_fps);
 
     for (const auto& file_path : files) {
@@ -136,11 +125,10 @@ int main(int argc, char** argv) {
             m.convertTo(m, CV_16U, 65535.0 / 255.0); // 8U -> 16U 스케일링
         }
         
-        if (m.cols != gst_config.width || m.rows != gst_config.height) {
+        if (m.cols != 160 || m.rows != 120) {
              std::cerr << "[WARN] Image size mismatch (" << m.cols << "x" << m.rows 
-                       << "). Expected (" << gst_config.width << "x" << gst_config.height
-                       << "). Resizing...\n";
-             cv::resize(m, m, cv::Size(gst_config.width, gst_config.height));
+                       << "). Expected (160x120). Resizing...\n";
+             cv::resize(m, m, cv::Size(160, 120));
         }
 
 

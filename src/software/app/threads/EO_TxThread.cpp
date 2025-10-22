@@ -15,6 +15,13 @@ EO_TxThread::EO_TxThread(std::string name, SpscMailbox<std::shared_ptr<EOFrameHa
       gst_config_(gst_config)
 {}
 
+// Default constructor using default GstConfig values
+EO_TxThread::EO_TxThread(std::string name, SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb)
+    : name_(std::move(name)),
+      mb_(mb),
+      gst_config_(GstConfig{}) // Use default values
+{}
+
 // 소멸자: GStreamer 리소스 정리
 EO_TxThread::~EO_TxThread() {
     stop();
@@ -25,7 +32,7 @@ EO_TxThread::~EO_TxThread() {
     }
 }
 
-// GStreamer 파이프라인 초기화 - YUV422를 I420로 변환하여 H.264 스트리밍
+// GStreamer 파이프라인 초기화 - YUV422를 I420로 변환하여 jpegenc 스트리밍
 bool EO_TxThread::initialize_gstreamer() {
     static bool gst_initialized = false;
     if (!gst_initialized) {
