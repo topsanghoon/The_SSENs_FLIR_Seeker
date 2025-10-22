@@ -31,7 +31,7 @@ class CsvLoggerAru; // 전방선언 (구체 타입)
 
 class EO_ArUcoThread {
 public:
-    EO_ArUcoThread(SpscMailbox<EOFrameHandle>& eo_mb,
+    EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb,
                    IArucoPreprocessor&       preproc,
                    IArucoDetector&           detector,
                    IEventBus&                bus,
@@ -40,10 +40,10 @@ public:
     void start();
     void stop();
     void join();
-    void onFrameArrived(EOFrameHandle h);
+    void onFrameArrived(std::shared_ptr<EOFrameHandle> h);
 
 private:
-    SpscMailbox<EOFrameHandle>& eo_mb_;
+    SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb_;
     IArucoPreprocessor&       preproc_;
     IArucoDetector&           detector_;
     IEventBus&                bus_;
@@ -55,7 +55,7 @@ private:
 
     void run();
     void wait_until_ready();
-    void on_frame(EOFrameHandle& h);
+    void on_frame(const std::shared_ptr<EOFrameHandle>& h);
     void emit_aruco(int id,
                     const std::array<cv::Point2f,4>& corners,
                     const cv::Rect2f& box,
