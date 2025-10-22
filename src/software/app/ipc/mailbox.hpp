@@ -15,14 +15,14 @@ namespace flir {
 template <typename T>
 class SpscMailbox {
 public:
-    explicit SpscMailbox(size_t capacity = 256)
+    explicit SpscMailbox(size_t capacity = 256) // 기본 사이즈는 256, SpscMailbox(1) 로 생성하면 칸을 수정할 수 있음
     : cap_(capacity), buf_(capacity) {}
 
     // 생산자: item을 기록
-    void push(const T& item) {
+    void push(const T& item) {  // 복사 전달일 경우
         emplace_impl(item);
     }
-    void push(T&& item) {
+    void push(T&& item) {       // 기존에 것은 버리고 새로운 것에 전달을 하는 것. 그래서 move 사용
         emplace_impl(std::move(item));
     }
 
