@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
         }
 
         // === EOFrameHandle 꾸러미 생성 ===
-        auto h = flir::EOFrameHandle::make<MatHandle>();
+        auto h = std::make_shared<MatHandle>();
         h->keep = std::make_shared<cv::Mat>(std::move(m));
         
         auto& owned = h->owned;
