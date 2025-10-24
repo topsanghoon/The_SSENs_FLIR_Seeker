@@ -3,21 +3,25 @@
 
 namespace flir {
 
-// 제어 명령 DTO
 struct CtrlCmd {
-    int   mode{0};      // 0: SAFE, 1: RUN ...
-    float p1{0.f};
-    float p2{0.f};
-    float p3{0.f};
+    int mode = 0;
+    float p1 = 0, p2 = 0, p3 = 0;
 
-    static CtrlCmd safe_pose() { return CtrlCmd{0, 0.f, 0.f, 0.f}; }
+    // 기본 동작 명령 (중립)
+    static CtrlCmd safe_pose() {
+        CtrlCmd c; c.mode = 0;
+        return c;
+    }
+
+    // 자폭 알림 명령
+    static CtrlCmd make_self_destruct() {
+        CtrlCmd c;
+        c.mode = 99;  // 아두이노 측에서 99를 STOP으로 처리
+        c.p1 = c.p2 = c.p3 = 0;
+        return c;
+    }
+
     int to_int() const { return mode; }
-};
-
-// 자폭/안전정지 명령 DTO
-struct SelfDestructCmd {
-    uint32_t seq{0};
-    int      level{1};   // 임의의 등급
 };
 
 } // namespace flir

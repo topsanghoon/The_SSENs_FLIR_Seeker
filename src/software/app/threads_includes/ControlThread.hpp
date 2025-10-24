@@ -19,20 +19,10 @@ namespace flir {
 class ControlThread {
 public:
     struct Config {
-        int period_ms      = 20;   // 50 Hz
-        int sd_quiesce_ms  = 100;
-        int sd_park_ms     = 500;
+        int period_ms      = 20;   // 제어 주기 (50Hz)
     };
 
-    // 기본 설정(기본 생성자 Config 사용)
-    ControlThread(IEventBus&                    bus,
-                  SpscMailbox<SelfDestructCmd>& sd_mb,
-                  TargetFusion&                 fusion,
-                  IController&                  controller,
-                  IActuatorPort&                act,
-                  CsvLoggerCtrl&                logger);
-
-    // 사용자 설정 전달
+    // 기본 생성자 제거 → 반드시 Config 전달
     ControlThread(IEventBus&                    bus,
                   SpscMailbox<SelfDestructCmd>& sd_mb,
                   TargetFusion&                 fusion,
@@ -58,7 +48,7 @@ private:
     CsvLoggerCtrl&                log_;
     Config                        cfg_;
 
-    // 스레드/동기화
+    // 스레드 관리
     std::thread             th_;
     std::atomic<bool>       running_{false};
     std::mutex              m_;
@@ -66,17 +56,15 @@ private:
 
     // 상태
     enum class Mode   { RUN, SHUTDOWN };
-    enum class SdPhase{ SD_IDLE, SD_QUIESCE, SD_PARK, SD_STOP_IO, SD_DONE };
+    enum class SdPhase{ SD_IDLE, SD_QUIESCE, SD_DONE };
 
     Mode       mode_  = Mode::RUN;
     SdPhase    phase_ = SdPhase::SD_IDLE;
     uint32_t   sd_seq_seen_ = 0;
     std::chrono::steady_clock::time_point t_phase_start_{};
 
-    // 주기틱 시각
     clock_t::time_point next_tick_tp_{clock_t::now()};
 
-    // 내부 동작
     void run();
     bool ready_to_wake();
 
@@ -86,6 +74,7 @@ private:
     void tick_run_mode();
     void step_shutdown_fsm();
 
+    // Wake handle (EventBus 신호용)
     struct CvWakeHandle : public WakeHandle {
         std::condition_variable* cv{};
         std::mutex*              mu{};
