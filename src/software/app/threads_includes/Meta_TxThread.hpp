@@ -21,15 +21,13 @@ struct LatestTrack { cv::Rect2f box{}; float score=0.f; uint64_t ts=0; uint32_t 
 struct LatestAruco { int id=-1; cv::Rect2f box{}; uint64_t ts=0; };
 struct LatestCtrl  { int state=0; int last_cmd=0; uint64_t ts=0; };
 
-
 struct MetaTxConfig {
     int  hb_period_ms    = 200;
-    uint16_t local_port  = 56060;        // 0=임의 포트, 그 외=고정 바인드
-    char remote_ip[64]   = "192.168.2.191";
-    uint16_t remote_port = 56060;        // 필수
-    int  sndbuf_bytes    = 256*1024; // 선택
+    uint16_t local_port  = 0;                 // ★ 송신만이면 0 권장(바인드 생략)
+    char remote_ip[64]   = "192.168.2.191"; // ★ WPF PC IP 기본값
+    uint16_t remote_port = 5001;              // 필수
+    int  sndbuf_bytes    = 256*1024;          // 선택
 };
-
 
 // EPOLL로 기다릴 fd 핸들 모음(주입 또는 내부 생성)
 struct MetaFds {
@@ -64,7 +62,6 @@ private:
     bool own_epfd_{false};
     bool own_efd_{false};
     bool own_tfd_{false};
-
     bool own_sock_{false};
 
     // 상태

@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
 
         // [Net_RxThread Configuration]
         flir::NetRxConfig config;
-        config.port = 5001;  // Same port as Windows client sends to
+        config.port = 5000;  // Same port as Windows client sends to
         config.buffer_size = 1024;
         config.timeout_ms = 100;
 

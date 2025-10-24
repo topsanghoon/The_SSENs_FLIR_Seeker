@@ -169,70 +169,39 @@ void Net_RxThread::cleanup_socket() {
 
 bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd& cmd) {
     try {
-        // Expected format: Simple binary protocol
-        // Byte 0: Command type (0 = CLICK)
-        // Bytes 1-4: x coordinate (float, network byte order)
-        // Bytes 5-8: y coordinate (float, network byte order) 
-        // Bytes 9-12: width (float, network byte order)
-        // Bytes 13-16: height (float, network byte order)
-        
-        if (size >= 17) { // Minimum size for our protocol
-            // Parse command type
-            uint8_t cmd_type = data[0];
-            if (cmd_type == 0) { // CLICK command
+        // Binary: [type:1][x:float(be):4][y:float(be):4]  => 총 9 바이트
+        if (size >= 9 && data[0] == 0) {
+            union { uint32_t i; float f; } u;
+            u.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[1]));
+            float x = u.f;
+            u.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[5]));
+            float y = u.f;
+
+            if (x >= 0 && y >= 0 && x <= 4096 && y <= 4096) {
+                float s  = cfg_.click_box_size;
+                float bx = std::max(0.0f, x - s * 0.5f);
+                float by = std::max(0.0f, y - s * 0.5f);
+
                 cmd.type = CmdType::CLICK;
-                
-                // Parse coordinates (convert from network byte order)
-                union { uint32_t i; float f; } converter;
-                
-                // X coordinate
-                converter.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[1]));
-                float x = converter.f;
-                
-                // Y coordinate  
-                converter.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[5]));
-                float y = converter.f;
-                
-                // Width
-                converter.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[9]));
-                float width = converter.f;
-                
-                // Height
-                converter.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[13]));
-                float height = converter.f;
-                
-                // Validate coordinates
-                if (x >= 0 && y >= 0 && width > 0 && height > 0 && 
-                    width <= 1920 && height <= 1080) { // Reasonable bounds
-                    cmd.box = cv::Rect2f(x, y, width, height);
-                    cmd.seq = cmd_seq_.fetch_add(1);
-                    
-                    if (cfg_.enable_debug) {
-                        log_debug("Parsed CLICK command: (" + std::to_string(x) + "," + 
-                                 std::to_string(y) + "," + std::to_string(width) + "," + 
-                                 std::to_string(height) + ")");
-                    }
-                    return true;
-                } else {
-                    log_debug("Invalid coordinates received: x=" + std::to_string(x) + 
-                             " y=" + std::to_string(y) + " w=" + std::to_string(width) + 
-                             " h=" + std::to_string(height));
-                }
-            } else {
+                cmd.box  = cv::Rect2f(bx, by, s, s);
+                cmd.seq  = cmd_seq_.fetch_add(1);
+
                 if (cfg_.enable_debug) {
-                    log_debug("Unknown command type: " + std::to_string(cmd_type));
+                    log_debug("Parsed BIN CLICK x=" + std::to_string(x) + " y=" + std::to_string(y));
                 }
+                return true;
+            } else {
+                if (cfg_.enable_debug) log_debug("BIN CLICK out-of-range");
             }
         } else {
-            log_debug("Buffer too small: " + std::to_string(size) + " bytes");
+            if (cfg_.enable_debug) log_debug("Not a BIN CLICK packet (len=" + std::to_string(size) + ")");
         }
-        
     } catch (const std::exception& e) {
         log_debug(std::string("Exception parsing user command: ") + e.what());
     }
-    
     return false;
 }
+
 
 void Net_RxThread::log_debug(const std::string& msg) {
     if (cfg_.enable_debug) {

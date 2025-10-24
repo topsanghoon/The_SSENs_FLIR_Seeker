@@ -34,6 +34,10 @@ static inline uint64_t now_ns() {
     using namespace std::chrono;
     return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
+static inline uint64_t now_ms_epoch() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
 static inline void drain_eventfd(int efd) {
     uint64_t cnt;
     while (::read(efd, &cnt, sizeof(cnt)) > 0) { /* drain all */ }
@@ -64,15 +68,15 @@ static bool make_sockaddr_ipv4(const char* ip, uint16_t port,
 
 // ---- ctor/lifecycle ----
 Meta_TxThread::Meta_TxThread(IEventBus& bus, MetaTxConfig cfg, MetaFds fds)
-: bus_(bus), 
-cfg_(cfg), 
-fds_(fds) 
+: bus_(bus),
+  cfg_(cfg),
+  fds_(fds)
 {}
 
 void Meta_TxThread::start() {
     running_.store(true);
 
-    // epoll/efd/tfd 생성 (기존 그대로)
+    // epoll/efd/tfd 생성
     if (fds_.epfd < 0) { fds_.epfd = ::epoll_create1(EPOLL_CLOEXEC); own_epfd_ = true; }
     if (fds_.efd  < 0) { fds_.efd  = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); own_efd_ = true; }
     if (fds_.tfd  < 0) { fds_.tfd  = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC); own_tfd_ = true; }
@@ -85,7 +89,7 @@ void Meta_TxThread::start() {
     ev.data.fd = fds_.efd;  ::epoll_ctl(fds_.epfd, EPOLL_CTL_ADD, fds_.efd, &ev);
     ev.data.fd = fds_.tfd;  ::epoll_ctl(fds_.epfd, EPOLL_CTL_ADD, fds_.tfd, &ev);
 
-    // ★ 1) 필요 시 소켓 생성/옵션/바인드
+    // 소켓 생성/옵션/바인드(선택)
     if (fds_.sock_meta < 0) {
         int s = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
         if (s >= 0) {
@@ -98,29 +102,42 @@ void Meta_TxThread::start() {
                 a.sin_family      = AF_INET;
                 a.sin_addr.s_addr = INADDR_ANY;
                 a.sin_port        = htons(cfg_.local_port);
-                (void)::bind(s, (sockaddr*)&a, sizeof(a)); // 실패해도 송신만 할거면 필수는 아님
+                if (::bind(s, (sockaddr*)&a, sizeof(a)) != 0) {
+                    std::cerr << "[META] bind failed on :" << cfg_.local_port
+                              << " err=" << strerror(errno) << "\n";
+                } else {
+                    std::cout << "[META] bound on :" << cfg_.local_port << "\n";
+                }
             }
             fds_.sock_meta = s;
             own_sock_ = true;
+        } else {
+            std::cerr << "[META] socket() failed: " << strerror(errno) << "\n";
         }
-        // else: 생성 실패 시에도 진행(하단 send_XXX에서 sock_meta < 0이면 skip)
     }
 
-    // ★ 2) 목적지 설정(유효하면)
+    // 목적지 설정
     if (cfg_.remote_port != 0 && cfg_.remote_ip[0] != '\0') {
         sockaddr_storage dst{}; socklen_t dlen = 0;
         if (make_sockaddr_ipv4(cfg_.remote_ip, cfg_.remote_port, dst, dlen)) {
             set_meta_target(reinterpret_cast<sockaddr*>(&dst), dlen);
+            std::cout << "[META] target set to " << cfg_.remote_ip
+                      << ":" << cfg_.remote_port << "\n";
         } else {
-            // ip 파싱 실패 → set_meta_target 미설정(전송은 skip됨)
+            std::cerr << "[META] invalid remote_ip: " << cfg_.remote_ip << "\n";
         }
+    } else {
+        std::cerr << "[META] remote target not set\n";
     }
 
-    // EVT_BUS 구독 (기존 그대로)
+    // EVT_BUS 구독
     wake_ = std::make_unique<EfdWakeHandle>(fds_.efd);
     bus_.subscribe(Topic::Tracking, &inbox_, wake_.get());
     bus_.subscribe(Topic::Aruco,    &inbox_, wake_.get());
     bus_.subscribe(Topic::Control,  &inbox_, wake_.get());
+
+    std::cout << "[META] hb_period_ms=" << cfg_.hb_period_ms
+              << " remote=" << cfg_.remote_ip << ":" << cfg_.remote_port << "\n";
 
     th_ = std::thread(&Meta_TxThread::run, this);
 }
@@ -133,7 +150,6 @@ void Meta_TxThread::stop() {
     }
 }
 
-
 void Meta_TxThread::join() {
     if (th_.joinable()) th_.join();
     bus_.unsubscribe(&inbox_);
@@ -143,14 +159,13 @@ void Meta_TxThread::join() {
     if (own_efd_  && fds_.efd  >= 0) { ::close(fds_.efd ); fds_.efd  = -1; own_efd_  = false; }
     if (own_tfd_  && fds_.tfd  >= 0) { ::close(fds_.tfd ); fds_.tfd  = -1; own_tfd_  = false; }
 
-    // ★ 우리가 만든 소켓만 닫기
+    // 우리가 만든 소켓만 닫기
     if (own_sock_ && fds_.sock_meta >= 0) {
         ::close(fds_.sock_meta);
         fds_.sock_meta = -1;
         own_sock_ = false;
     }
 }
-
 
 void Meta_TxThread::set_meta_target(const struct sockaddr* sa, socklen_t slen) {
     ::memset(&sa_meta_, 0, sizeof(sa_meta_));
@@ -166,7 +181,8 @@ void Meta_TxThread::run() {
         int n = ::epoll_wait(fds_.epfd, evs, MAXE, -1);
         if (n < 0) {
             if (errno == EINTR) continue;  // 신호로 깨어난 경우
-            break;                         // 그 외 오류는 루프 종료(로그 넣어도 됨)
+            std::cerr << "[META] epoll_wait err: " << strerror(errno) << "\n";
+            break;
         }
         if (n == 0) continue;
 
@@ -181,7 +197,7 @@ void Meta_TxThread::run() {
 // ---- 즉시 송신(코얼레스 없음) ----
 void Meta_TxThread::on_eventfd_ready() {
     drain_eventfd(fds_.efd);
-    std::cout << "send" << "\n";
+
     while (auto ev = inbox_.exchange(nullptr)) {
         switch (ev->type) {
             case EventType::Track: {
@@ -189,7 +205,7 @@ void Meta_TxThread::on_eventfd_ready() {
                 last_trk_.box = x.box; last_trk_.score = x.score; last_trk_.ts = x.ts; last_trk_.frame_seq = x.frame_seq;
 
                 MetaTrackPacket p{};
-                p.seq = x.frame_seq; p.ts = x.ts;
+                p.seq = x.frame_seq; p.ts = x.ts; // 이미 ns/epoch 등 상위에서 정한 단위
                 p.x = x.box.x; p.y = x.box.y; p.w = x.box.width; p.h = x.box.height;
                 p.score = x.score;
                 send_track(p);
@@ -222,7 +238,6 @@ void Meta_TxThread::on_eventfd_ready() {
                 break;
             }
             default:
-                // 필요시 Init/Lost/NeedReselect 등도 패킷 정의해 전송 가능
                 break;
         }
     }
@@ -257,36 +272,42 @@ MetaCtrlPacket Meta_TxThread::make_meta_ctrl() const {
     return p;
 }
 MetaHBPacket Meta_TxThread::make_meta_hb() const {
-    MetaHBPacket p{}; p.ts = now_ns(); return p;
+    MetaHBPacket p{};
+    p.ts = now_ms_epoch();               // ★ HB는 epoch ms로
+    return p;
 }
 
 // ---- 송신(단일 소켓/목적지) ----
 void Meta_TxThread::send_track(const MetaTrackPacket& p) {
     if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
         auto buf = build_track(p.ts, p.seq, {p.x,p.y,p.w,p.h}, p.score);
-        (void)::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                       (sockaddr*)&sa_meta_, sl_meta_);
+        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
+                             (sockaddr*)&sa_meta_, sl_meta_);
+        if (n < 0) std::cerr << "[META] send_track failed: " << strerror(errno) << "\n";
     }
 }
 void Meta_TxThread::send_aruco(const MetaArucoPacket& p) {
     if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
         auto buf = build_aruco(p.ts, p.id, {p.x,p.y,p.w,p.h});
-        (void)::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                       (sockaddr*)&sa_meta_, sl_meta_);
+        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
+                             (sockaddr*)&sa_meta_, sl_meta_);
+        if (n < 0) std::cerr << "[META] send_aruco failed: " << strerror(errno) << "\n";
     }
 }
 void Meta_TxThread::send_ctrl(const MetaCtrlPacket& p) {
     if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
         auto buf = build_ctrl(p.ts, p.state_or_cmd);
-        (void)::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                       (sockaddr*)&sa_meta_, sl_meta_);
+        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
+                             (sockaddr*)&sa_meta_, sl_meta_);
+        if (n < 0) std::cerr << "[META] send_ctrl failed: " << strerror(errno) << "\n";
     }
 }
 void Meta_TxThread::send_hb(const MetaHBPacket& p) {
     if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
         auto buf = build_hb(p.ts);
-        (void)::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                       (sockaddr*)&sa_meta_, sl_meta_);
+        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
+                             (sockaddr*)&sa_meta_, sl_meta_);
+        if (n < 0) std::cerr << "[META] send_hb failed: " << strerror(errno) << "\n";
     }
 }
 

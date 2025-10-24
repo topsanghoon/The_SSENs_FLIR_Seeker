@@ -24,7 +24,7 @@ public:
         int         port = 5003;             // 사용할 UDP 포트 (IR과 다르게 5001)
         int         width = 360;             // V4L2에서 받는 영상 너비
         int         height = 240;            // V4L2에서 받는 영상 높이
-        int         fps = 30;                // EO 카메라 프레임 속도
+        int         fps = 15;                // EO 카메라 프레임 속도
     };
 
     // Constructor with custom GStreamer configuration

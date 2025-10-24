@@ -6,6 +6,7 @@ add_subdirectory(controlthread)
 add_subdirectory(ir_tx_test)
 add_subdirectory(eo_tx_test)
 add_subdirectory(net_rx_test)
+add_subdirectory(rxtx)
 
 
 # 필요해지면 아래 주석 해제해서 확장
