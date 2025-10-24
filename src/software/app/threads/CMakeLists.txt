@@ -2,6 +2,9 @@ file(GLOB THREADS_SRC CONFIGURE_DEPENDS
   *.cpp
 )
 
+# Remove ControlThread.cpp since it depends on IController which we don't use
+list(REMOVE_ITEM THREADS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ControlThread.cpp)
+
 add_library(threads STATIC ${THREADS_SRC})
 
 target_include_directories(threads
