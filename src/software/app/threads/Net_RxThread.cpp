@@ -169,14 +169,12 @@ void Net_RxThread::cleanup_socket() {
 
 bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd& cmd) {
     try {
-        // Expected format: Simple binary protocol
+        // Updated protocol: Simple click coordinates only
         // Byte 0: Command type (0 = CLICK)
         // Bytes 1-4: x coordinate (float, network byte order)
-        // Bytes 5-8: y coordinate (float, network byte order) 
-        // Bytes 9-12: width (float, network byte order)
-        // Bytes 13-16: height (float, network byte order)
+        // Bytes 5-8: y coordinate (float, network byte order)
         
-        if (size >= 17) { // Minimum size for our protocol
+        if (size >= 9) { // Minimum size for click coordinate protocol
             // Parse command type
             uint8_t cmd_type = data[0];
             if (cmd_type == 0) { // CLICK command
@@ -193,30 +191,27 @@ bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd&
                 converter.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[5]));
                 float y = converter.f;
                 
-                // Width
-                converter.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[9]));
-                float width = converter.f;
-                
-                // Height
-                converter.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[13]));
-                float height = converter.f;
-                
-                // Validate coordinates
-                if (x >= 0 && y >= 0 && width > 0 && height > 0 && 
-                    width <= 1920 && height <= 1080) { // Reasonable bounds
-                    cmd.box = cv::Rect2f(x, y, width, height);
+                // Validate coordinates (reasonable bounds for image coordinates)
+                if (x >= 0 && y >= 0 && x <= 4096 && y <= 4096) { 
+                    // Convert click point to bounding box for tracking initialization
+                    // Create a small box around the click point for tracker
+                    float box_size = cfg_.click_box_size;  // Default box size around click
+                    float box_x = std::max(0.0f, x - box_size/2);
+                    float box_y = std::max(0.0f, y - box_size/2);
+                    
+                    cmd.box = cv::Rect2f(box_x, box_y, box_size, box_size);
                     cmd.seq = cmd_seq_.fetch_add(1);
                     
                     if (cfg_.enable_debug) {
-                        log_debug("Parsed CLICK command: (" + std::to_string(x) + "," + 
-                                 std::to_string(y) + "," + std::to_string(width) + "," + 
-                                 std::to_string(height) + ")");
+                        log_debug("Parsed CLICK at (" + std::to_string(x) + "," + 
+                                 std::to_string(y) + ") -> box(" + 
+                                 std::to_string(box_x) + "," + std::to_string(box_y) + "," + 
+                                 std::to_string(box_size) + "," + std::to_string(box_size) + ")");
                     }
                     return true;
                 } else {
                     log_debug("Invalid coordinates received: x=" + std::to_string(x) + 
-                             " y=" + std::to_string(y) + " w=" + std::to_string(width) + 
-                             " h=" + std::to_string(height));
+                             " y=" + std::to_string(y));
                 }
             } else {
                 if (cfg_.enable_debug) {
@@ -224,7 +219,7 @@ bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd&
                 }
             }
         } else {
-            log_debug("Buffer too small: " + std::to_string(size) + " bytes");
+            log_debug("Buffer too small: " + std::to_string(size) + " bytes, expected at least 9");
         }
         
     } catch (const std::exception& e) {

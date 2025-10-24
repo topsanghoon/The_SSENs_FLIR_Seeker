@@ -16,6 +16,7 @@ struct NetRxConfig {
     bool enable_debug = false;
     int buffer_size = 1024;
     int timeout_ms = 100; // Socket timeout for non-blocking behavior
+    float click_box_size = 40.0f; // Size of bounding box created around click point
 };
 
 // Network receive thread that gets user input from Windows PC via UDP

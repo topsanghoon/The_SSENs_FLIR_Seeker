@@ -1,8 +1,10 @@
 """
 Simple Windows Click Sender for Net_RxThread Test
 
-This script sends click commands to the Net_RxThread without requiring video reception.
-Just click anywhere in the window to send click commands to the Linux system.
+This script sends click coordinates to Net_RxThread. The Linux system converts
+the click point to a bounding box for object tracking initialization.
+
+Protocol: Sends only (x,y) coordinates - Net_RxThread creates tracking box automatically.
 
 Requirements:
 - Python 3.x
@@ -11,7 +13,7 @@ Requirements:
 Usage:
 1. Change LINUX_PC_IP to your Ubuntu system's IP address
 2. Run: python simple_click_sender.py
-3. Click anywhere in the window to send commands
+3. Click anywhere in the window to send coordinates
 4. Press 'q' or ESC to quit
 """
 
@@ -108,23 +110,17 @@ class ClickSender:
                 return False
                 
         try:
-            # Create click command (Net_RxThread expected format)
+            # Create click command (Net_RxThread updated format - just coordinates)
             # Byte 0: Command type (0 = CLICK)
             # Bytes 1-4: x coordinate (float, network byte order)
-            # Bytes 5-8: y coordinate (float, network byte order) 
-            # Bytes 9-12: width (float, network byte order)
-            # Bytes 13-16: height (float, network byte order)
+            # Bytes 5-8: y coordinate (float, network byte order)
+            # Note: Net_RxThread will create bounding box automatically
             
-            width = 10.0   # Small box width for click
-            height = 10.0  # Small box height for click
-            
-            # Pack command: type(1 byte) + x(4 bytes) + y(4 bytes) + width(4 bytes) + height(4 bytes)
-            command_data = struct.pack('!Bffff', 
+            # Pack command: type(1 byte) + x(4 bytes) + y(4 bytes)
+            command_data = struct.pack('!Bff', 
                                      0,          # Command type: 0 = CLICK
                                      float(x),   # X position (network byte order)
-                                     float(y),   # Y position (network byte order)
-                                     width,      # Width (network byte order)
-                                     height)     # Height (network byte order)
+                                     float(y))   # Y position (network byte order)
             
             # Send to Linux
             self.sock.sendto(command_data, (self.linux_ip, self.port))
