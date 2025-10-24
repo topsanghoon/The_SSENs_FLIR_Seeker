@@ -4,8 +4,9 @@
 namespace flir {
 
 EO_ArucoDetector_OpenCV::EO_ArucoDetector_OpenCV(int dict_id) {
-    dict_   = cv::aruco::getPredefinedDictionary(dict_id);
-    params_ = cv::aruco::DetectorParameters::create();
+    dict_   = cv::makePtr<cv::aruco::Dictionary>(cv::aruco::getPredefinedDictionary(dict_id));
+    params_ = cv::makePtr<cv::aruco::DetectorParameters>();
+
     // 필요시 params_ 조정 (adaptiveThreshWinSizeMin/Max, cornerRefinementMethod 등)
 }
 

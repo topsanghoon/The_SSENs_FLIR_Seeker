@@ -1,5 +1,6 @@
 #pragma once
 #include <opencv2/aruco.hpp>
+#include <opencv2/core.hpp>
 #include "threads_includes/EO_ArUcoThread.hpp" // IArucoDetector
 
 namespace flir {

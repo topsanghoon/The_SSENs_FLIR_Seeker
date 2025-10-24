@@ -1,0 +1,59 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ir_thread_gui 실행 및 디버그",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/software/build/debug/app/tools/ir_trackthread/ir_thread_gui",
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "/usr/local/lib:${env:LD_LIBRARY_PATH}"
+                }
+            ],
+            "MIMode": "gdb",
+            "preLaunchTask": "CMake: build"
+        },
+        {
+            "name": "ir_tx_test 실행 및 디버그",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/software/build/debug/app/tools/ir_tx_test/ir_tx_test",
+            "args": [
+                "/home/user/THESSENS/The_SSENs_FLIR_Seeker/data/FLIR_Sample"
+            ],
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "/usr/local/lib:${env:LD_LIBRARY_PATH}"
+                }
+            ],
+            "MIMode": "gdb",
+            "preLaunchTask": "CMake: build"
+        },
+        {
+            "name": "eo_tx_test 실행 및 디버그",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/software/build/debug/app/tools/eo_tx_test/eo_tx_test",
+            "args": [
+                "/home/user/THESSENS/The_SSENs_FLIR_Seeker/data/EO_Sample"
+            ],
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "/usr/local/lib:${env:LD_LIBRARY_PATH}"
+                }
+            ],
+            "MIMode": "gdb",
+            "preLaunchTask": "CMake: build"
+        }
+    ]
+}

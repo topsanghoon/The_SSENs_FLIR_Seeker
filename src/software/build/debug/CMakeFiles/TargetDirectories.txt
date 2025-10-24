@@ -22,3 +22,9 @@
 /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/controlthread/CMakeFiles/rebuild_cache.dir
 /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/controlthread/CMakeFiles/edit_cache.dir
 /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/controlthread/CMakeFiles/control_test.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_tx_test/CMakeFiles/rebuild_cache.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_tx_test/CMakeFiles/edit_cache.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_tx_test/CMakeFiles/ir_tx_test.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_tx_test/CMakeFiles/rebuild_cache.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_tx_test/CMakeFiles/edit_cache.dir
+/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_tx_test/CMakeFiles/eo_tx_test.dir
