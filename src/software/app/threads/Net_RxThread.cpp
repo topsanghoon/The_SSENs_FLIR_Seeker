@@ -1,11 +1,14 @@
 #include "threads_includes/Net_RxThread.hpp"
-#include <iostream>
+#include "components/includes/common_log.hpp"
+
 #include <cstring>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <errno.h>
 
 namespace flir {
+
+static constexpr const char* TAG = "Net_RxThread";
 
 Net_RxThread::Net_RxThread(SpscMailbox<UserCmd>& cmd_mb, NetRxConfig cfg)
     : cmd_mb_(cmd_mb), cfg_(std::move(cfg)) {
@@ -20,143 +23,107 @@ Net_RxThread::~Net_RxThread() {
 
 void Net_RxThread::start() {
     if (running_.exchange(true)) {
-        log_debug("Net_RxThread already running");
+        LOGDs(TAG) << "already running";
         return;
     }
-    
     th_ = std::thread(&Net_RxThread::run, this);
-    log_debug("Net_RxThread started");
+    LOGDs(TAG) << "started";
 }
 
 void Net_RxThread::stop() {
-    if (!running_.exchange(false)) {
-        return;
-    }
-    
-    // Close socket to break out of recv calls
+    if (!running_.exchange(false)) return;
     if (socket_fd_ != -1) {
         close(socket_fd_);
         socket_fd_ = -1;
     }
-    
-    log_debug("Net_RxThread stop requested");
+    LOGDs(TAG) << "stop requested";
 }
 
 void Net_RxThread::join() {
     if (th_.joinable()) {
         th_.join();
-        log_debug("Net_RxThread joined");
+        LOGDs(TAG) << "joined";
     }
 }
 
 void Net_RxThread::run() {
-    log_debug("Net_RxThread::run() starting");
-    
+    LOGDs(TAG) << "run() starting";
     try {
         setup_socket();
-        
-        log_debug("UDP socket listening on port " + std::to_string(cfg_.port));
-        
-        // Main receive loop
+        LOGDs(TAG) << "listening UDP port " << cfg_.port;
+
         std::vector<uint8_t> buffer(cfg_.buffer_size);
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
-        
+
         while (running_.load()) {
-            // Receive data from Windows PC
-            ssize_t bytes_received = recvfrom(socket_fd_, buffer.data(), buffer.size(), 0,
-                                            (struct sockaddr*)&client_addr, &client_len);
-            
-            if (bytes_received > 0) {
+            ssize_t n = recvfrom(socket_fd_, buffer.data(), buffer.size(), 0,
+                                 (struct sockaddr*)&client_addr, &client_len);
+            if (n > 0) {
                 received_count_.fetch_add(1);
-                
-                if (cfg_.enable_debug) {
-                    char client_ip[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
-                    log_debug("Received " + std::to_string(bytes_received) + 
-                             " bytes from " + std::string(client_ip) + ":" + 
-                             std::to_string(ntohs(client_addr.sin_port)));
-                }
-                
-                // Try to parse user command
+
+                char ip[INET_ADDRSTRLEN] = {0};
+                inet_ntop(AF_INET, &client_addr.sin_addr, ip, INET_ADDRSTRLEN);
+                LOGD(TAG, "recv %zd bytes from %s:%u", n, ip, ntohs(client_addr.sin_port));
+
                 UserCmd cmd;
-                if (parse_user_command(buffer.data(), bytes_received, cmd)) {
-                    // Send command to IR_TrackThread via mailbox
+                if (parse_user_command(buffer.data(), (size_t)n, cmd)) {
                     cmd_mb_.push(std::move(cmd));
                     processed_count_.fetch_add(1);
-                    
-                    if (cfg_.enable_debug) {
-                        log_debug("Processed UserCmd: type=" + std::to_string(static_cast<int>(cmd.type)) +
-                                 " box=(" + std::to_string(cmd.box.x) + "," + std::to_string(cmd.box.y) + "," +
-                                 std::to_string(cmd.box.width) + "," + std::to_string(cmd.box.height) + ")" +
-                                 " seq=" + std::to_string(cmd.seq));
-                    }
+                    LOGDs(TAG) << "pushed UserCmd seq=" << cmd.seq
+                               << " box=(" << cmd.box.x << "," << cmd.box.y << ","
+                               << cmd.box.width << "," << cmd.box.height << ")";
                 }
-            } else if (bytes_received == -1) {
+            } else if (n == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // Timeout, continue loop
-                    continue;
+                    continue; // timeout
                 } else if (errno == EBADF || errno == ENOTSOCK) {
-                    // Socket closed (normal shutdown)
-                    break;
+                    break;    // socket closed (normal)
                 } else {
-                    log_debug("recvfrom error: " + std::string(strerror(errno)));
+                    LOGEs(TAG) << "recvfrom error: " << strerror(errno);
                     break;
                 }
             }
         }
-        
-        log_debug("Receive loop exited");
-        
+        LOGDs(TAG) << "receive loop exited";
     } catch (const std::exception& e) {
-        log_debug(std::string("Exception in Net_RxThread::run(): ") + e.what());
+        LOGEs(TAG) << "exception in run(): " << e.what();
     }
-    
     cleanup_socket();
-    log_debug("Net_RxThread::run() finished");
+    LOGDs(TAG) << "run() finished";
 }
 
 void Net_RxThread::setup_socket() {
-    // Create UDP socket
     socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
     if (socket_fd_ == -1) {
-        throw std::runtime_error("Failed to create socket: " + std::string(strerror(errno)));
+        throw std::runtime_error(std::string("socket() failed: ") + strerror(errno));
     }
-    
-    // Set socket to non-blocking with timeout
-    struct timeval timeout;
-    timeout.tv_sec = cfg_.timeout_ms / 1000;
-    timeout.tv_usec = (cfg_.timeout_ms % 1000) * 1000;
-    
-    if (setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-        close(socket_fd_);
-        socket_fd_ = -1;
-        throw std::runtime_error("Failed to set socket timeout: " + std::string(strerror(errno)));
+
+    // recv timeout
+    timeval tv{};
+    tv.tv_sec  = cfg_.timeout_ms / 1000;
+    tv.tv_usec = (cfg_.timeout_ms % 1000) * 1000;
+    if (setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        close(socket_fd_); socket_fd_ = -1;
+        throw std::runtime_error(std::string("setsockopt(SO_RCVTIMEO) failed: ") + strerror(errno));
     }
-    
-    // Allow socket reuse
+
     int reuse = 1;
     if (setsockopt(socket_fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-        close(socket_fd_);
-        socket_fd_ = -1;
-        throw std::runtime_error("Failed to set socket reuse: " + std::string(strerror(errno)));
+        close(socket_fd_); socket_fd_ = -1;
+        throw std::runtime_error(std::string("setsockopt(SO_REUSEADDR) failed: ") + strerror(errno));
     }
-    
-    // Configure server address
-    memset(&server_addr_, 0, sizeof(server_addr_));
+
+    std::memset(&server_addr_, 0, sizeof(server_addr_));
     server_addr_.sin_family = AF_INET;
     server_addr_.sin_addr.s_addr = INADDR_ANY;
     server_addr_.sin_port = htons(cfg_.port);
-    
-    // Bind socket
     if (bind(socket_fd_, (struct sockaddr*)&server_addr_, sizeof(server_addr_)) == -1) {
-        close(socket_fd_);
-        socket_fd_ = -1;
-        throw std::runtime_error("Failed to bind socket to port " + std::to_string(cfg_.port) + 
-                                ": " + std::string(strerror(errno)));
+        close(socket_fd_); socket_fd_ = -1;
+        throw std::runtime_error("bind() failed on port " + std::to_string(cfg_.port) +
+                                 ": " + std::string(strerror(errno)));
     }
-    
-    log_debug("UDP socket set up successfully on port " + std::to_string(cfg_.port));
+    LOGDs(TAG) << "socket ready on port " << cfg_.port;
 }
 
 void Net_RxThread::cleanup_socket() {
@@ -164,16 +131,18 @@ void Net_RxThread::cleanup_socket() {
         close(socket_fd_);
         socket_fd_ = -1;
     }
-    log_debug("Socket cleanup completed");
+    LOGDs(TAG) << "socket cleanup";
 }
 
+// Binary: [type:1][x:float(be):4][y:float(be):4] => 9 bytes
 bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd& cmd) {
     try {
-        // Binary: [type:1][x:float(be):4][y:float(be):4]  => 총 9 바이트
-        if (size >= 9 && data[0] == 0) {
+        if (size >= 9 && data[0] == 0) { // CLICK
             union { uint32_t i; float f; } u;
+
             u.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[1]));
             float x = u.f;
+
             u.i = ntohl(*reinterpret_cast<const uint32_t*>(&data[5]));
             float y = u.f;
 
@@ -186,27 +155,19 @@ bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd&
                 cmd.box  = cv::Rect2f(bx, by, s, s);
                 cmd.seq  = cmd_seq_.fetch_add(1);
 
-                if (cfg_.enable_debug) {
-                    log_debug("Parsed BIN CLICK x=" + std::to_string(x) + " y=" + std::to_string(y));
-                }
+                LOGDs(TAG) << "parsed BIN CLICK x=" << x << " y=" << y
+                           << " -> box=(" << bx << "," << by << "," << s << "," << s << ")";
                 return true;
             } else {
-                if (cfg_.enable_debug) log_debug("BIN CLICK out-of-range");
+                LOGWs(TAG) << "BIN CLICK out-of-range x=" << x << " y=" << y;
             }
         } else {
-            if (cfg_.enable_debug) log_debug("Not a BIN CLICK packet (len=" + std::to_string(size) + ")");
+            LOGWs(TAG) << "not a BIN CLICK packet (len=" << size << ", type=" << int(data[0]) << ")";
         }
     } catch (const std::exception& e) {
-        log_debug(std::string("Exception parsing user command: ") + e.what());
+        LOGEs(TAG) << "exception parsing user command: " << e.what();
     }
     return false;
-}
-
-
-void Net_RxThread::log_debug(const std::string& msg) {
-    if (cfg_.enable_debug) {
-        std::cout << "[Net_RxThread] " << msg << std::endl;
-    }
 }
 
 } // namespace flir

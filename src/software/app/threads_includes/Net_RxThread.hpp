@@ -13,7 +13,6 @@ namespace flir {
 // Configuration for Net_RxThread
 struct NetRxConfig {
     int port = 5000;
-    bool enable_debug = true;
     int buffer_size = 1024;
     int timeout_ms = 100; // Socket timeout for non-blocking behavior
     float click_box_size = 40.0f; // Size of bounding box created around click point
@@ -61,7 +60,6 @@ private:
     
     // Data processing
     bool parse_user_command(const uint8_t* data, size_t size, UserCmd& cmd);
-    void log_debug(const std::string& msg);
 };
 
 } // namespace flir

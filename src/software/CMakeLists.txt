@@ -9,6 +9,12 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+# 최상단 CMakeLists.txt
+if(FLIR_LOG_DISABLE)
+  add_compile_definitions(FLIR_LOG_DISABLE)
+endif()
+
+
 find_package(Threads REQUIRED)
 
 # EO 스위치만 여기서 선언

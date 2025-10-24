@@ -215,7 +215,6 @@ int main(int argc, char** argv)
     rx_cfg.port           = 5000;      // WPF가 보내는 포트
     rx_cfg.buffer_size    = 2048;
     rx_cfg.timeout_ms     = 50;
-    rx_cfg.enable_debug   = true;      // 디버그 로그
     rx_cfg.click_box_size = 40.0f;     // 클릭 점에서 생성할 초기 박스 크기
     flir::Net_RxThread net_rx(mb_click, rx_cfg);
 
