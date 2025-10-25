@@ -1945,11 +1945,11 @@ CONFIG_run-postinsts=y
 #
 # opencv 
 #
-# CONFIG_opencv is not set
-# CONFIG_opencv-dev is not set
-# CONFIG_opencv-apps is not set
-# CONFIG_opencv-samples is not set
-# CONFIG_opencv-dbg is not set
+CONFIG_opencv=y
+CONFIG_opencv-dev=y
+CONFIG_opencv-apps=y
+CONFIG_opencv-samples=y
+CONFIG_opencv-dbg=y
 
 #
 # pango 
@@ -2309,19 +2309,19 @@ CONFIG_udev-extraconf=y
 #
 # gstreamer1.0-plugins-base 
 #
-# CONFIG_gstreamer1.0-plugins-base is not set
-# CONFIG_gstreamer1.0-plugins-base-dev is not set
-# CONFIG_gstreamer1.0-plugins-base-apps is not set
-# CONFIG_gstreamer1.0-plugins-base-meta is not set
-# CONFIG_gstreamer1.0-plugins-base-dbg is not set
+CONFIG_gstreamer1.0-plugins-base=y
+CONFIG_gstreamer1.0-plugins-base-dev=y
+CONFIG_gstreamer1.0-plugins-base-apps=y
+CONFIG_gstreamer1.0-plugins-base-meta=y
+CONFIG_gstreamer1.0-plugins-base-dbg=y
 
 #
 # gstreamer1.0-plugins-good 
 #
-# CONFIG_gstreamer1.0-plugins-good is not set
-# CONFIG_gstreamer1.0-plugins-good-meta is not set
-# CONFIG_gstreamer1.0-plugins-good-dev is not set
-# CONFIG_gstreamer1.0-plugins-good-dbg is not set
+CONFIG_gstreamer1.0-plugins-good=y
+CONFIG_gstreamer1.0-plugins-good-meta=y
+CONFIG_gstreamer1.0-plugins-good-dev=y
+CONFIG_gstreamer1.0-plugins-good-dbg=y
 
 #
 # hicolor-icon-theme 
@@ -3008,8 +3008,8 @@ CONFIG_tcf-agent=y
 #
 # v4l-utils 
 #
-# CONFIG_v4l-utils is not set
-# CONFIG_libv4l is not set
+CONFIG_v4l-utils=y
+CONFIG_libv4l=y
 # CONFIG_ir-keytable is not set
 # CONFIG_v4l-utils-dev is not set
 # CONFIG_media-ctl is not set
@@ -3258,9 +3258,9 @@ CONFIG_tcf-agent=y
 #
 # gstreamer1.0 
 #
-# CONFIG_gstreamer1.0 is not set
-# CONFIG_gstreamer1.0-dev is not set
-# CONFIG_gstreamer1.0-dbg is not set
+CONFIG_gstreamer1.0=y
+CONFIG_gstreamer1.0-dev=y
+CONFIG_gstreamer1.0-dbg=y
 
 #
 # net 
