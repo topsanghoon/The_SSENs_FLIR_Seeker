@@ -44,14 +44,15 @@ bool EO_TxThread::initialize_gstreamer() {
 
     // appsrc(BGR) → videoconvert → jpegenc → udpsink
     std::stringstream ss;
-    ss << "appsrc name=eo_appsrc format=GST_FORMAT_TIME is-live=true ! "
-       << "video/x-raw,format=BGR,width=" << gst_config_.width
-       << ",height=" << gst_config_.height
-       << ",framerate=" << gst_config_.fps << "/1 ! "
-       << "videoconvert ! "
-       << "jpegenc ! "
-       << "udpsink host=" << gst_config_.pc_ip
-       << " port=" << gst_config_.port;
+    ss << "appsrc name=eo_appsrc is-live=true do-timestamp=true block=false "
+    << "! video/x-raw,format=BGR,width=" << gst_config_.width
+    << ",height=" << gst_config_.height
+    << ",framerate=" << gst_config_.fps << "/1 "
+    << "! queue max-size-buffers=8 max-size-time=0 leaky=downstream "
+    << "! videoconvert "
+    << "! jpegenc quality=30 "        // CPU 부하 줄이기(필요시 더 낮춰도 OK)
+    << "! udpsink host=" << gst_config_.pc_ip
+    << " port=" << gst_config_.port;
 
     const std::string pipeline_str = ss.str();
     LOGI(TAG, "pipeline: %s", pipeline_str.c_str());
