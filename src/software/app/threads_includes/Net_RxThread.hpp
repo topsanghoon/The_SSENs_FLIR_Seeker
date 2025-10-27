@@ -1,65 +1,60 @@
 #pragma once
+
 #include <atomic>
-#include <thread>
+#include <cstdint>
+#include <memory>
 #include <string>
-#include <sys/socket.h>
+#include <thread>
+#include <vector>
+
 #include <netinet/in.h>
 
-#include "ipc/ipc_types.hpp"
+#include "main_config.hpp"
+#include "util/common_log.hpp"
 #include "ipc/mailbox.hpp"
+#include "ipc/ipc_types.hpp"   // CmdType, UserCmd
 
 namespace flir {
 
-// Configuration for Net_RxThread
-struct NetRxConfig {
-    int port = 5000;
-    int buffer_size = 1024;
-    int timeout_ms = 100; // Socket timeout for non-blocking behavior
-    float click_box_size = 40.0f; // Size of bounding box created around click point
-};
-
-// Network receive thread that gets user input from Windows PC via UDP
-// Receives click commands and forwards to IR_TrackThread via mailbox
 class Net_RxThread {
 public:
-    Net_RxThread(SpscMailbox<UserCmd>& cmd_mb, 
-                 NetRxConfig cfg = {});
-    
+    Net_RxThread(std::string name,
+                 AppConfigPtr cfg,
+                 SpscMailbox<UserCmd>& outbox);
     ~Net_RxThread();
+
+    Net_RxThread(const Net_RxThread&) = delete;
+    Net_RxThread& operator=(const Net_RxThread&) = delete;
 
     void start();
     void stop();
     void join();
 
-    // Stats/debug
-    uint32_t get_received_count() const { return received_count_.load(); }
-    uint32_t get_processed_count() const { return processed_count_.load(); }
+private:
+    bool init_socket_();
+    void close_socket_();
+    void run_();
+    void handle_datagram_(const uint8_t* data, size_t len, const sockaddr_in& src);
+
+    // "CLICK x y" 텍스트 파서 → UserCmd로 채움
+    bool parse_cmd_click_(const std::string& msg, UserCmd& out);
 
 private:
-    // Configuration and mailbox
-    SpscMailbox<UserCmd>& cmd_mb_;
-    NetRxConfig cfg_;
-    
-    // Thread management
-    std::thread th_;
+    std::string name_;
+    AppConfigPtr cfg_;
+    SpscMailbox<UserCmd>& outbox_;
+
+    std::thread       th_;
     std::atomic<bool> running_{false};
-    
-    // Network components
-    int socket_fd_ = -1;
-    struct sockaddr_in server_addr_;
-    
-    // Statistics
-    std::atomic<uint32_t> received_count_{0};
-    std::atomic<uint32_t> processed_count_{0};
-    std::atomic<uint32_t> cmd_seq_{1};
-    
-    // Internal methods
-    void run();
-    void setup_socket();
-    void cleanup_socket();
-    
-    // Data processing
-    bool parse_user_command(const uint8_t* data, size_t size, UserCmd& cmd);
+
+    int      sock_{-1};
+    bool     own_sock_{false};
+    uint16_t bind_port_{0};
+
+    std::vector<uint8_t> rxbuf_;
+
+    // UserCmd.seq 부여용 로컬 시퀀스
+    uint32_t cmd_seq_{0};
 };
 
 } // namespace flir

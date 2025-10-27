@@ -1,76 +1,65 @@
 #pragma once
 
-#include <thread>
 #include <atomic>
-#include <string>
-#include <mutex>
 #include <condition_variable>
+#include <cstdint>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
 
-#include "components/includes/EO_Frame.hpp"
-#include "ipc/mailbox.hpp"
-#include "ipc/wake.hpp"
+#include <gst/gst.h>
+#include <gst/app/gstappsrc.h>
 
-// GStreamer 타입 전방 선언
-struct _GstElement;
-struct _GstAppSrc;
+#include "main_config.hpp"                          // AppConfig/AppConfigPtr
+#include "util/common_log.hpp"                      // LOG*
+#include "ipc/mailbox.hpp"                              // SpscMailbox
+#include "ipc/wake.hpp"                                 // WakeHandle
+#include "ipc/wake_condvar.hpp"                         // WakeHandleCondVar
+#include "components/includes/EO_Frame.hpp"             // FrameBGR8, EOFrameHandle
 
 namespace flir {
 
 class EO_TxThread {
 public:
-    struct GstConfig {
-        std::string pc_ip = "192.168.2.191"; // 데이터를 수신할 PC의 IP 주소
-        int         port = 5003;             // 사용할 UDP 포트 (IR과 다르게 5001)
-        int         width = 360;             // V4L2에서 받는 영상 너비
-        int         height = 240;            // V4L2에서 받는 영상 높이
-        int         fps = 15;                // EO 카메라 프레임 속도
-    };
-
-    // Constructor with custom GStreamer configuration
-    EO_TxThread(
-        std::string name,
-        SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb,
-        const GstConfig& gst_config
-    );
-    
-    // Constructor with default GStreamer configuration
-    EO_TxThread(
-        std::string name,
-        SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb
-    );
-    
+    EO_TxThread(std::string name,
+                AppConfigPtr cfg,
+                SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb,
+                WakeHandle& /*unused*/);
     ~EO_TxThread();
+
+    EO_TxThread(const EO_TxThread&) = delete;
+    EO_TxThread& operator=(const EO_TxThread&) = delete;
 
     void start();
     void stop();
     void join();
-    
+
+    // 테스트/프로듀서가 사용할 깨우기 핸들 제공 (원래 코드 호환)
     std::unique_ptr<WakeHandle> create_wake_handle();
 
 private:
-    void run();
-    void wait_for_frame();
     bool initialize_gstreamer();
+    void wait_for_frame();
     void push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle);
+    void run();
 
-    // === 협력자 / 구성 ===
+private:
+    // 주입
     std::string name_;
-    SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb_; 
-    const GstConfig gst_config_;
-    
-    // === 스레드 관리 ===
-    std::thread th_;
-    std::atomic<bool> running_{false};
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    
-    // === 상태 ===
-    uint32_t frame_seq_seen_ = 0;
+    AppConfigPtr cfg_;
+    SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb_;
 
-    // === GStreamer 멤버 변수 ===
-    _GstElement* pipeline_ = nullptr;
-    _GstAppSrc*  appsrc_ = nullptr;
+    // 스레드/동기화
+    std::thread       th_;
+    std::atomic<bool> running_{false};
+    std::condition_variable cv_;
+    std::mutex              mutex_;
+    uint32_t frame_seq_seen_{0};
+
+    // GStreamer
+    GstElement* pipeline_{nullptr};
+    GstAppSrc*  appsrc_{nullptr};
 };
 
 } // namespace flir

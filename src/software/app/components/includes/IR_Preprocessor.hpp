@@ -2,7 +2,6 @@
 #pragma once
 #include <opencv2/core.hpp>
 #include "IR_Frame.hpp"
-#include "threads_includes/common.hpp"
 #include "threads_includes/IR_TrackThread.hpp" // 인터페이스 상속용
 
 namespace flir {

@@ -1,320 +1,226 @@
-// Meta_TxThread.cpp (compile-time logging 적용판)
 #include "threads_includes/Meta_TxThread.hpp"
-#include "components/includes/MetaWire.hpp"     // 패킷 빌더
-#include "components/includes/common_log.hpp"                       // ★ compile-time logger
 
+// 프로토콜 빌더/이벤트 페이로드 타입은 cpp에서만 include
+#include "components/includes/MetaWire.hpp"   // build_track/build_aruco/build_ctrl/build_hb
+#include "ipc/ipc_types.hpp"                  // TrackEvent/ArucoEvent/MetaCtrlEvent/CtrlStateEvent
+
+#include <arpa/inet.h>
+#include <cerrno>
+#include <chrono>
+#include <cstring>
+#include <stdexcept>
 #include <sys/epoll.h>
-#include <sys/timerfd.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
-#include <cstring>
-#include <chrono>
-#include <cerrno>
-#include <arpa/inet.h>   // inet_pton (리눅스)
-#include <netinet/in.h>  // sockaddr_in
-
-#include "ipc/event_bus.hpp"
-#include "ipc/ipc_types.hpp"
 
 namespace flir {
 
-static constexpr const char* TAG = "Meta_Tx";
+namespace {
+constexpr const char* TAG = "Meta_Tx";
 
-// ---- WakeHandle: eventfd 기반 ----
-class EfdWakeHandle : public WakeHandle {
+inline uint64_t now_ns() {
+    using namespace std::chrono;
+    return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
+inline uint64_t now_ms_epoch() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+inline void drain_eventfd(int efd) {
+    uint64_t cnt; while (::read(efd, &cnt, sizeof(cnt)) > 0) {}
+}
+inline void drain_timerfd(int tfd) {
+    uint64_t expirations; (void)::read(tfd, &expirations, sizeof(expirations));
+}
+inline itimerspec make_period_ms(int ms) {
+    itimerspec its{}; its.it_value.tv_sec = ms/1000; its.it_value.tv_nsec = (ms%1000)*1000000LL; its.it_interval = its.it_value; return its;
+}
+inline bool make_sockaddr_ipv4(const char* ip, uint16_t port, sockaddr_storage& ss, socklen_t& sl) {
+    sockaddr_in sa{}; sa.sin_family = AF_INET; sa.sin_port = htons(port);
+    if (::inet_pton(AF_INET, ip, &sa.sin_addr) != 1) return false;
+    std::memset(&ss, 0, sizeof(ss)); std::memcpy(&ss, &sa, sizeof(sa)); sl = sizeof(sa); return true;
+}
+} // namespace
+
+// eventfd 기반 wake 핸들 (내부 정의)
+class Meta_TxThread::EfdWakeHandle : public WakeHandle {
 public:
     explicit EfdWakeHandle(int efd) : efd_(efd) {}
-    void signal() override {
-        uint64_t one = 1;
-        (void)!::write(efd_, &one, sizeof(one)); // EAGAIN 무시
-    }
+    void signal() override { uint64_t one = 1; (void)!::write(efd_, &one, sizeof(one)); }
 private:
     int efd_;
 };
 
-// ---- 유틸 ----
-static inline uint64_t now_ns() {
-    using namespace std::chrono;
-    return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
-}
-static inline uint64_t now_ms_epoch() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-}
-static inline void drain_eventfd(int efd) {
-    uint64_t cnt;
-    while (::read(efd, &cnt, sizeof(cnt)) > 0) { /* drain all */ }
-}
-static inline void drain_timerfd(int tfd) {
-    uint64_t expirations;
-    (void)::read(tfd, &expirations, sizeof(expirations));
-}
-static inline itimerspec make_period_ms(int ms) {
-    itimerspec its{};
-    its.it_value.tv_sec  = ms / 1000;
-    its.it_value.tv_nsec = (ms % 1000) * 1000000LL;
-    its.it_interval      = its.it_value; // periodic
-    return its;
-}
-
-static bool make_sockaddr_ipv4(const char* ip, uint16_t port,
-                               sockaddr_storage& ss, socklen_t& sl) {
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port   = htons(port);
-    if (::inet_pton(AF_INET, ip, &sa.sin_addr) != 1) return false;
-    std::memset(&ss, 0, sizeof(ss));
-    std::memcpy(&ss, &sa, sizeof(sa));
-    sl = sizeof(sa);
-    return true;
-}
-
-// ---- ctor/lifecycle ----
-Meta_TxThread::Meta_TxThread(IEventBus& bus, MetaTxConfig cfg, MetaFds fds)
-: bus_(bus),
-  cfg_(cfg),
-  fds_(fds)
-{}
+Meta_TxThread::Meta_TxThread(IEventBus& bus, AppConfigPtr cfg)
+    : bus_(bus), cfg_(std::move(cfg)) {}
+Meta_TxThread::~Meta_TxThread() { stop(); join(); close_io_(); }
 
 void Meta_TxThread::start() {
-    running_.store(true);
+    if (running_.exchange(true)) return;
+    if (!init_io_()) { running_.store(false); throw std::runtime_error("Meta_TxThread init_io failed"); }
 
-    // epoll/efd/tfd 생성
-    if (fds_.epfd < 0) { fds_.epfd = ::epoll_create1(EPOLL_CLOEXEC); own_epfd_ = true; }
-    if (fds_.efd  < 0) { fds_.efd  = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); own_efd_ = true; }
-    if (fds_.tfd  < 0) { fds_.tfd  = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC); own_tfd_ = true; }
-
-    itimerspec its = make_period_ms(cfg_.hb_period_ms);
-    ::timerfd_settime(fds_.tfd, 0, &its, nullptr);
-
-    epoll_event ev{};
-    ev.events = EPOLLIN;
-    ev.data.fd = fds_.efd;  ::epoll_ctl(fds_.epfd, EPOLL_CTL_ADD, fds_.efd, &ev);
-    ev.data.fd = fds_.tfd;  ::epoll_ctl(fds_.epfd, EPOLL_CTL_ADD, fds_.tfd, &ev);
-
-    // 소켓 생성/옵션/바인드(선택)
-    if (fds_.sock_meta < 0) {
-        int s = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-        if (s >= 0) {
-            if (cfg_.sndbuf_bytes > 0) {
-                int sz = cfg_.sndbuf_bytes;
-                (void)::setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sz, sizeof(sz));
-            }
-            if (cfg_.local_port != 0) {
-                sockaddr_in a{};
-                a.sin_family      = AF_INET;
-                a.sin_addr.s_addr = INADDR_ANY;
-                a.sin_port        = htons(cfg_.local_port);
-                if (::bind(s, (sockaddr*)&a, sizeof(a)) != 0) {
-                    LOGE(TAG, "bind failed on :%u err=%s", cfg_.local_port, strerror(errno));
-                } else {
-                    LOGI(TAG, "bound on :%u", cfg_.local_port);
-                }
-            }
-            fds_.sock_meta = s;
-            own_sock_ = true;
-        } else {
-            LOGE(TAG, "socket() failed: %s", strerror(errno));
-        }
-    }
-
-    // 목적지 설정
-    if (cfg_.remote_port != 0 && cfg_.remote_ip[0] != '\0') {
-        sockaddr_storage dst{}; socklen_t dlen = 0;
-        if (make_sockaddr_ipv4(cfg_.remote_ip, cfg_.remote_port, dst, dlen)) {
-            set_meta_target(reinterpret_cast<sockaddr*>(&dst), dlen);
-            LOGI(TAG, "target set to %s:%u", cfg_.remote_ip, cfg_.remote_port);
-        } else {
-            LOGE(TAG, "invalid remote_ip: %s", cfg_.remote_ip);
-        }
-    } else {
-        LOGW(TAG, "remote target not set");
-    }
-
-    // EVT_BUS 구독
-    wake_ = std::make_unique<EfdWakeHandle>(fds_.efd);
+    wake_ = std::make_unique<EfdWakeHandle>(efd_);
     bus_.subscribe(Topic::Tracking, &inbox_, wake_.get());
     bus_.subscribe(Topic::Aruco,    &inbox_, wake_.get());
     bus_.subscribe(Topic::Control,  &inbox_, wake_.get());
 
-    LOGI(TAG, "hb_period_ms=%d remote=%s:%u",
-         cfg_.hb_period_ms, cfg_.remote_ip, cfg_.remote_port);
-
-    th_ = std::thread(&Meta_TxThread::run, this);
+    hb_period_ms_ = cfg_->meta_tx.hb_period_ms;
+    th_ = std::thread(&Meta_TxThread::run_, this);
 }
 
 void Meta_TxThread::stop() {
+    if (!running_.load()) return;
     running_.store(false);
-    if (fds_.efd >= 0) {
-        EfdWakeHandle tmp(fds_.efd);
-        tmp.signal(); // 깨워서 종료 루프로
-    }
+    if (efd_ >= 0) { EfdWakeHandle tmp(efd_); tmp.signal(); }
 }
-
 void Meta_TxThread::join() {
     if (th_.joinable()) th_.join();
     bus_.unsubscribe(&inbox_);
     wake_.reset();
-
-    if (own_epfd_ && fds_.epfd >= 0) { ::close(fds_.epfd); fds_.epfd = -1; own_epfd_ = false; }
-    if (own_efd_  && fds_.efd  >= 0) { ::close(fds_.efd ); fds_.efd  = -1; own_efd_  = false; }
-    if (own_tfd_  && fds_.tfd  >= 0) { ::close(fds_.tfd ); fds_.tfd  = -1; own_tfd_  = false; }
-
-    // 우리가 만든 소켓만 닫기
-    if (own_sock_ && fds_.sock_meta >= 0) {
-        ::close(fds_.sock_meta);
-        fds_.sock_meta = -1;
-        own_sock_ = false;
-    }
 }
 
-void Meta_TxThread::set_meta_target(const struct sockaddr* sa, socklen_t slen) {
-    ::memset(&sa_meta_, 0, sizeof(sa_meta_));
-    ::memcpy(&sa_meta_, sa, slen); sl_meta_ = slen;
-}
+bool Meta_TxThread::init_io_() {
+    close_io_(); // 방어적
 
-// ---- epoll 루프 ----
-void Meta_TxThread::run() {
-    constexpr int MAXE = 8;
-    epoll_event evs[MAXE];
+    epfd_ = ::epoll_create1(EPOLL_CLOEXEC);
+    if (epfd_ < 0) { LOGE(TAG, "epoll_create1: %s", strerror(errno)); return false; }
+    own_epfd_ = true;
 
-    while (running_.load()) {
-        int n = ::epoll_wait(fds_.epfd, evs, MAXE, -1);
-        if (n < 0) {
-            if (errno == EINTR) continue;  // 신호로 깨어난 경우
-            LOGE(TAG, "epoll_wait err: %s", strerror(errno));
-            break;
+    efd_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (efd_ < 0) { LOGE(TAG, "eventfd: %s", strerror(errno)); return false; }
+    own_efd_ = true;
+
+    tfd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    if (tfd_ < 0) { LOGE(TAG, "timerfd_create: %s", strerror(errno)); return false; }
+    own_tfd_ = true;
+
+    itimerspec its = make_period_ms(cfg_->meta_tx.hb_period_ms);
+    ::timerfd_settime(tfd_, 0, &its, nullptr);
+
+    epoll_event ev{}; ev.events = EPOLLIN;
+    ev.data.fd = efd_; (void)::epoll_ctl(epfd_, EPOLL_CTL_ADD, efd_, &ev);
+    ev.data.fd = tfd_; (void)::epoll_ctl(epfd_, EPOLL_CTL_ADD, tfd_, &ev);
+
+    sock_ = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (sock_ < 0) { LOGE(TAG, "socket: %s", strerror(errno)); return false; }
+    own_sock_ = true;
+
+    if (cfg_->meta_tx.sndbuf_bytes > 0) {
+        int sz = cfg_->meta_tx.sndbuf_bytes;
+        if (::setsockopt(sock_, SOL_SOCKET, SO_SNDBUF, &sz, sizeof(sz)) != 0) {
+            LOGW(TAG, "setsockopt(SO_SNDBUF=%d) failed: %s", sz, strerror(errno));
         }
-        if (n == 0) continue;
+    }
+    if (cfg_->meta_tx.local_port != 0) {
+        sockaddr_in a{}; a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_ANY); a.sin_port = htons(cfg_->meta_tx.local_port);
+        if (::bind(sock_, (sockaddr*)&a, sizeof(a)) != 0) LOGE(TAG, "bind :%u failed: %s", cfg_->meta_tx.local_port, strerror(errno));
+        else LOGI(TAG, "bound on :%u", cfg_->meta_tx.local_port);
+    }
+    if (!cfg_->meta_tx.dst.ip.empty() && cfg_->meta_tx.dst.port != 0) {
+        sockaddr_storage dst{}; socklen_t dlen = 0;
+        if (make_sockaddr_ipv4(cfg_->meta_tx.dst.ip.c_str(), cfg_->meta_tx.dst.port, dst, dlen)) {
+            set_meta_target_((sockaddr*)&dst, dlen);
+            LOGI(TAG, "target %s:%u", cfg_->meta_tx.dst.ip.c_str(), cfg_->meta_tx.dst.port);
+        } else {
+            LOGE(TAG, "invalid remote_ip: %s", cfg_->meta_tx.dst.ip.c_str());
+        }
+    } else {
+        LOGW(TAG, "remote target not set");
+    }
+    return true;
+}
 
+void Meta_TxThread::close_io_() {
+    if (own_epfd_ && epfd_ >= 0) { ::close(epfd_); epfd_ = -1; own_epfd_ = false; }
+    if (own_efd_  && efd_  >= 0) { ::close(efd_ ); efd_  = -1; own_efd_  = false; }
+    if (own_tfd_  && tfd_  >= 0) { ::close(tfd_ ); tfd_  = -1; own_tfd_  = false; }
+    if (own_sock_ && sock_ >= 0) { ::close(sock_); sock_ = -1; own_sock_ = false; }
+}
+void Meta_TxThread::set_meta_target_(const struct sockaddr* sa, socklen_t slen) {
+    std::memset(&sa_meta_, 0, sizeof(sa_meta_));
+    std::memcpy(&sa_meta_, sa, slen);
+    sl_meta_ = slen;
+}
+
+void Meta_TxThread::run_() {
+    constexpr int MAXE = 8; epoll_event evs[MAXE];
+    while (running_.load()) {
+        int n = ::epoll_wait(epfd_, evs, MAXE, -1);
+        if (n < 0) { if (errno == EINTR) continue; LOGE(TAG, "epoll_wait: %s", strerror(errno)); break; }
+        if (n == 0) continue;
         for (int i = 0; i < n; ++i) {
             int fd = evs[i].data.fd;
-            if (fd == fds_.efd)      on_eventfd_ready();
-            else if (fd == fds_.tfd) on_timerfd_ready();
+            if (fd == efd_)      on_eventfd_ready_();
+            else if (fd == tfd_) on_timerfd_ready_();
         }
     }
+    LOGI(TAG, "run() exit");
 }
 
-// ---- 즉시 송신(코얼레스 없음) ----
-void Meta_TxThread::on_eventfd_ready() {
-    drain_eventfd(fds_.efd);
-
+void Meta_TxThread::on_eventfd_ready_() {
+    drain_eventfd(efd_);
     while (auto ev = inbox_.exchange(nullptr)) {
         switch (ev->type) {
             case EventType::Track: {
                 const auto& x = std::get<TrackEvent>(ev->payload);
-                last_trk_.box = x.box; last_trk_.score = x.score; last_trk_.ts = x.ts; last_trk_.frame_seq = x.frame_seq;
-
-                MetaTrackPacket p{};
-                p.seq = x.frame_seq; p.ts = x.ts; // 상위에서 정한 단위 사용
-                p.x = x.box.x; p.y = x.box.y; p.w = x.box.width; p.h = x.box.height;
-                p.score = x.score;
-                send_track(p);
+                last_trk_ = { (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.score, x.ts, x.frame_seq };
+                send_track_(x.ts, x.frame_seq, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.score);
                 break;
             }
             case EventType::Aruco: {
                 const auto& x = std::get<ArucoEvent>(ev->payload);
-                last_aru_.id = x.id; last_aru_.box = x.box; last_aru_.ts = x.ts;
-
-                MetaArucoPacket p{};
-                p.seq = 0; p.ts = x.ts; p.id = x.id;
-                p.x = x.box.x; p.y = x.box.y; p.w = x.box.width; p.h = x.box.height;
-                send_aruco(p);
+                last_aru_ = { x.id, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.ts };
+                send_aruco_(x.ts, x.id, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height);
                 break;
             }
             case EventType::MetaCtrl: {
                 const auto& x = std::get<MetaCtrlEvent>(ev->payload);
                 last_ctl_.last_cmd = x.cmd; last_ctl_.ts = x.ts;
-
-                MetaCtrlPacket p{}; p.seq = 0; p.ts = x.ts; p.state_or_cmd = x.cmd;
-                send_ctrl(p);
+                send_ctrl_(x.ts, x.cmd);
                 break;
             }
             case EventType::CtrlState: {
                 const auto& x = std::get<CtrlStateEvent>(ev->payload);
                 last_ctl_.state = x.state; last_ctl_.ts = x.ts;
-
-                MetaCtrlPacket p{}; p.seq = 0; p.ts = x.ts; p.state_or_cmd = x.state;
-                send_ctrl(p);
+                send_ctrl_(x.ts, x.state);
                 break;
             }
-            default:
-                break;
+            default: break;
         }
     }
-
     last_sent_ns_ = now_ns();
 }
 
-void Meta_TxThread::on_timerfd_ready() {
-    drain_timerfd(fds_.tfd);
-    auto hb = make_meta_hb();
-    send_hb(hb);
+void Meta_TxThread::on_timerfd_ready_() {
+    drain_timerfd(tfd_);
+    send_hb_(now_ms_epoch());  // HB는 epoch ms
 }
 
-// ---- 패킷 빌더(하트비트만 사용. 나머지는 즉시 구성/전송) ----
-MetaTrackPacket Meta_TxThread::make_meta_track() const {
-    MetaTrackPacket p{};
-    p.seq = last_trk_.frame_seq; p.ts = last_trk_.ts;
-    p.x = last_trk_.box.x; p.y = last_trk_.box.y; p.w = last_trk_.box.width; p.h = last_trk_.box.height;
-    p.score = last_trk_.score;
-    return p;
+// ===== 송신 (cpp에서만 MetaWire 사용) =====
+void Meta_TxThread::send_track_(uint64_t ts, uint32_t seq, float x, float y, float w, float h, float score) {
+    if (sock_ < 0 || sl_meta_ == 0) return;
+    auto buf = build_track(ts, seq, {x,y,w,h}, score);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    if (n < 0) LOGE(TAG, "send_track failed: %s", strerror(errno)); else LOGDs(TAG) << "TX TRACK bytes=" << n;
 }
-MetaArucoPacket Meta_TxThread::make_meta_aruco() const {
-    MetaArucoPacket p{};
-    p.seq = 0; p.ts = last_aru_.ts; p.id = last_aru_.id;
-    p.x = last_aru_.box.x; p.y = last_aru_.box.y; p.w = last_aru_.box.width; p.h = last_aru_.box.height;
-    return p;
+void Meta_TxThread::send_aruco_(uint64_t ts, int id, float x, float y, float w, float h) {
+    if (sock_ < 0 || sl_meta_ == 0) return;
+    auto buf = build_aruco(ts, id, {x,y,w,h});
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno)); else LOGDs(TAG) << "TX ARUCO bytes=" << n;
 }
-MetaCtrlPacket Meta_TxThread::make_meta_ctrl() const {
-    MetaCtrlPacket p{};
-    p.seq = 0; p.ts = last_ctl_.ts;
-    p.state_or_cmd = (last_ctl_.last_cmd ? last_ctl_.last_cmd : last_ctl_.state);
-    return p;
+void Meta_TxThread::send_ctrl_(uint64_t ts, uint32_t state_or_cmd) {
+    if (sock_ < 0 || sl_meta_ == 0) return;
+    auto buf = build_ctrl(ts, state_or_cmd);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    if (n < 0) LOGE(TAG, "send_ctrl failed: %s", strerror(errno)); else LOGDs(TAG) << "TX CTRL bytes=" << n;
 }
-MetaHBPacket Meta_TxThread::make_meta_hb() const {
-    MetaHBPacket p{};
-    p.ts = now_ms_epoch();               // ★ HB는 epoch ms로
-    return p;
+void Meta_TxThread::send_hb_(uint64_t ts) {
+    if (sock_ < 0 || sl_meta_ == 0) return;
+    auto buf = build_hb(ts);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    if (n < 0) LOGE(TAG, "send_hb failed: %s", strerror(errno)); else LOGDs(TAG) << "TX HB bytes=" << n;
 }
-
-// ---- 송신(단일 소켓/목적지) ----
-void Meta_TxThread::send_track(const MetaTrackPacket& p) {
-    if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
-        auto buf = build_track(p.ts, p.seq, {p.x,p.y,p.w,p.h}, p.score);
-        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                             (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) LOGE(TAG, "send_track failed: %s", strerror(errno));
-        else       LOGDs(TAG) << "TX TRACK bytes=" << n;
-    }
-}
-void Meta_TxThread::send_aruco(const MetaArucoPacket& p) {
-    if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
-        auto buf = build_aruco(p.ts, p.id, {p.x,p.y,p.w,p.h});
-        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                             (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno));
-        else       LOGDs(TAG) << "TX ARUCO bytes=" << n;
-    }
-}
-void Meta_TxThread::send_ctrl(const MetaCtrlPacket& p) {
-    if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
-        auto buf = build_ctrl(p.ts, p.state_or_cmd);
-        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                             (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) LOGE(TAG, "send_ctrl failed: %s", strerror(errno));
-        else       LOGDs(TAG) << "TX CTRL bytes=" << n;
-    }
-}
-void Meta_TxThread::send_hb(const MetaHBPacket& p) {
-    if (fds_.sock_meta >= 0 && sl_meta_ > 0) {
-        auto buf = build_hb(p.ts);
-        ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
-                             (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) LOGE(TAG, "send_hb failed: %s", strerror(errno));
-        else       LOGDs(TAG) << "TX HB bytes=" << n;
-    }
-}
-
 } // namespace flir

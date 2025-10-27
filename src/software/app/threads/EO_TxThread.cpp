@@ -1,27 +1,20 @@
 #include "threads_includes/EO_TxThread.hpp"
-#include "ipc/wake_condvar.hpp"
 
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
-
-#include <gst/gst.h>
-#include <gst/app/gstappsrc.h>
-
-#include "components/includes/common_log.hpp"   // ★ 컴파일타임 로거 매크로
 
 namespace flir {
 
 static constexpr const char* TAG = "EO_Tx";
 
 EO_TxThread::EO_TxThread(std::string name,
+                         AppConfigPtr cfg,
                          SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb,
-                         const GstConfig& gst_config)
-    : name_(std::move(name)), mb_(mb), gst_config_(gst_config) {}
-
-EO_TxThread::EO_TxThread(std::string name,
-                         SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb)
-    : name_(std::move(name)), mb_(mb), gst_config_(GstConfig{}) {}
+                         WakeHandle& /*unused*/)
+    : name_(std::move(name))
+    , cfg_(std::move(cfg))
+    , mb_(mb) {}
 
 EO_TxThread::~EO_TxThread() {
     stop();
@@ -30,7 +23,7 @@ EO_TxThread::~EO_TxThread() {
         gst_element_set_state(pipeline_, GST_STATE_NULL);
         gst_object_unref(pipeline_);
         pipeline_ = nullptr;
-        appsrc_ = nullptr;
+        appsrc_   = nullptr;
     }
 }
 
@@ -42,19 +35,21 @@ bool EO_TxThread::initialize_gstreamer() {
         LOGI(TAG, "gst_init()");
     }
 
+    // 원래 잘 동작하던 파이프라인을 그대로 유지
     // appsrc(BGR) → videoconvert → jpegenc → udpsink
     std::stringstream ss;
-    ss << "appsrc name=eo_appsrc format=GST_FORMAT_TIME is-live=true ! "
-       << "video/x-raw,format=BGR,width=" << gst_config_.width
-       << ",height=" << gst_config_.height
-       << ",framerate=" << gst_config_.fps << "/1 ! "
-       << "videoconvert ! "
-       << "jpegenc ! "
-       << "udpsink host=" << gst_config_.pc_ip
-       << " port=" << gst_config_.port;
+    ss << "appsrc name=eo_appsrc is-live=true do-timestamp=true block=false "
+       << "! video/x-raw,format=BGR,width="  << cfg_->eo_tx.frame.width
+       << ",height="                         << cfg_->eo_tx.frame.height
+       << ",framerate="                      << cfg_->eo_tx.fps << "/1 "
+       << "! queue max-size-buffers=8 max-size-time=0 leaky=downstream "
+       << "! videoconvert "
+       << "! jpegenc quality="               << cfg_->eo_tx.jpeg_quality << " "
+       << "! udpsink host="                  << cfg_->eo_tx.dst.ip
+       << " port="                           << cfg_->eo_tx.dst.port;
 
     const std::string pipeline_str = ss.str();
-    LOGI(TAG, "pipeline: %s", pipeline_str.c_str());
+    LOGI(TAG, "EO pipeline: %s", pipeline_str.c_str());
 
     GError* error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
@@ -70,7 +65,7 @@ bool EO_TxThread::initialize_gstreamer() {
         return false;
     }
 
-    // appsrc에서 다운스트림이 잠기면 대기(block)하도록 설정
+    // 다운스트림이 막히면 block 하도록(원래 코드와 동일)
     g_object_set(G_OBJECT(appsrc_), "block", TRUE, nullptr);
 
     if (gst_element_set_state(pipeline_, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
@@ -78,8 +73,10 @@ bool EO_TxThread::initialize_gstreamer() {
         return false;
     }
 
-    LOGI(TAG, "GStreamer EO pipeline started (to %s:%u)",
-         gst_config_.pc_ip.c_str(), (unsigned)gst_config_.port);
+    LOGI(TAG, "EO_TxThread init done (dst=%s:%u %dx%d@%dfps q=%d)",
+         cfg_->eo_tx.dst.ip.c_str(), (unsigned)cfg_->eo_tx.dst.port,
+         cfg_->eo_tx.frame.width, cfg_->eo_tx.frame.height, cfg_->eo_tx.fps,
+         cfg_->eo_tx.jpeg_quality);
     return true;
 }
 
@@ -95,7 +92,7 @@ void EO_TxThread::start() {
 
 void EO_TxThread::stop() {
     running_.store(false);
-    cv_.notify_one();
+    cv_.notify_one(); // 대기 중이면 깨워서 종료 경로로
     LOGI(TAG, "stop requested");
 }
 
@@ -116,13 +113,13 @@ void EO_TxThread::wait_for_frame() {
 }
 
 void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle) {
-    if (!handle || !handle->p || !handle->p->data) return;
+    if (!appsrc_ || !handle || !handle->p || !handle->p->data) return;
 
-    // 실제 stride(step)를 반영한 안전한 크기
+    // 원래 코드와 동일: 실제 stride(step) 기반 크기 사용
     const guint buffer_size =
         static_cast<guint>(handle->p->step * handle->p->height);
 
-    // GStreamer의 버퍼 수명이 끝날 때까지 안전하게 데이터 보관
+    // 버퍼 수명 보장을 위해 shared_ptr 복사본을 사용자 데이터로 보관
     auto* handle_copy = new std::shared_ptr<EOFrameHandle>(handle);
 
     GstBuffer* buffer = gst_buffer_new_wrapped_full(
@@ -137,15 +134,16 @@ void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle
             delete h_ptr;
         });
 
-    // 타임스탬프/길이
-    GST_BUFFER_PTS(buffer)      = handle->ts; // ns 기준이라고 가정
-    GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, gst_config_.fps);
+    // ns 단위 pts/duration (fps 기준)
+    GST_BUFFER_PTS(buffer)      = handle->ts;
+    GST_BUFFER_DTS(buffer)      = handle->ts;
+    GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, cfg_->eo_tx.fps);
 
     const GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
     if (ret != GST_FLOW_OK) {
         LOGE(TAG, "gst_app_src_push_buffer failed: %d", (int)ret);
     } else {
-        LOGD(TAG, "pushed frame seq=%u bytes=%u", handle->seq, buffer_size);
+        LOGD(TAG, "pushed seq=%u bytes=%u", handle->seq, buffer_size);
     }
 }
 

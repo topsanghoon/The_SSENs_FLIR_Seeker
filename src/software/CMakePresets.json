@@ -19,7 +19,12 @@
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_EO": "ON",
         "OpenCV_DIR": "/usr/local/lib/cmake/opencv4",
-        "FLIR_LOG_DISABLE": "ON"           
+        "FLIR_LOG_DISABLE": "ON",
+        "FLIR_CSV_DISABLE": "ON",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+      },
+      "environment": {
+        "GST_DEBUG": "0"
       }
     },
     {
@@ -30,7 +35,12 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_EO": "ON",
-        "FLIR_LOG_DISABLE": "ON"            
+        "FLIR_LOG_DISABLE": "ON",
+        "FLIR_CSV_DISABLE": "ON",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+      },
+      "environment": {
+        "GST_DEBUG": "0"
       }
     },
     {
