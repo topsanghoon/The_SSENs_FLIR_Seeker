@@ -60,6 +60,7 @@ private:
                     const std::array<cv::Point2f,4>& corners,
                     const cv::Rect2f& box,
                     uint64_t ts_ns, uint32_t frame_seq);
+    void log_debug(const std::string& msg);
 };
 
 } // namespace flir

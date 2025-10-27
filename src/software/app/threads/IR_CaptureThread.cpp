@@ -12,11 +12,11 @@ namespace flir {
 
 IR_CaptureThread::IR_CaptureThread(
     std::string name,
-    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox,
-    const IRCaptureConfig& config)
+    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mb,
+    const IRCaptureConfig& cfg)
     : name_(std::move(name))
-    , output_mailbox_(output_mailbox)
-    , config_(config)
+    , output_mb_(output_mb)
+    , cfg_(cfg)
     , spi_fd_(-1)
     , segment_buffer_(vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE)
     , frame_buffer_(vospi::FRAME_WIDTH * vospi::FRAME_HEIGHT)
@@ -52,16 +52,16 @@ void IR_CaptureThread::join() {
 
 bool IR_CaptureThread::initialize_spi() {
     // Open SPI device
-    spi_fd_ = open(config_.spi_device.c_str(), O_RDWR);
+    spi_fd_ = open(cfg_.spi_device.c_str(), O_RDWR);
     if (spi_fd_ < 0) {
-        std::cerr << "[" << name_ << "] Failed to open SPI device: " << config_.spi_device << std::endl;
+        log_debug("Failed to open SPI device: " + cfg_.spi_device);
         return false;
     }
     
     // Set SPI mode (Mode 3: CPOL=1, CPHA=1)
     uint8_t spi_mode = SPI_MODE_3;
     if (ioctl(spi_fd_, SPI_IOC_WR_MODE, &spi_mode) < 0) {
-        std::cerr << "[" << name_ << "] Failed to set SPI mode" << std::endl;
+        log_debug("Failed to set SPI mode");
         close(spi_fd_);
         return false;
     }
@@ -69,21 +69,20 @@ bool IR_CaptureThread::initialize_spi() {
     // Set bits per word (8 bits)
     uint8_t bits_per_word = 8;
     if (ioctl(spi_fd_, SPI_IOC_WR_BITS_PER_WORD, &bits_per_word) < 0) {
-        std::cerr << "[" << name_ << "] Failed to set SPI bits per word" << std::endl;
+        log_debug("Failed to set SPI bits per word");
         close(spi_fd_);
         return false;
     }
     
     // Set SPI speed
-    uint32_t spi_speed = config_.spi_speed;
+    uint32_t spi_speed = cfg_.spi_speed;
     if (ioctl(spi_fd_, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed) < 0) {
-        std::cerr << "[" << name_ << "] Failed to set SPI speed" << std::endl;
+        log_debug("Failed to set SPI speed");
         close(spi_fd_);
         return false;
     }
     
-    std::cout << "[" << name_ << "] SPI initialized: " << config_.spi_device 
-              << " @ " << spi_speed << " Hz" << std::endl;
+    log_debug("SPI initialized: " + cfg_.spi_device + " @ " + std::to_string(spi_speed) + " Hz");
     
     return true;
 }
@@ -96,9 +95,9 @@ void IR_CaptureThread::cleanup_spi() {
 }
 
 void IR_CaptureThread::run() {
-    std::cout << "[" << name_ << "] IR capture thread started" << std::endl;
+    log_debug("IR capture thread started");
     
-    auto target_period = std::chrono::microseconds(1000000 / config_.fps);
+    auto target_period = std::chrono::microseconds(1000000 / cfg_.fps);
     auto next_frame_time = std::chrono::steady_clock::now();
     
     while (running_.load()) {
@@ -108,14 +107,14 @@ void IR_CaptureThread::run() {
             if (capture_vospi_frame()) {
                 auto frame = create_frame_handle();
                 if (frame) {
-                    output_mailbox_.push(frame);
+                    output_mb_.push(frame);
                     frame_count_.fetch_add(1);
                 }
             } else {
                 error_count_.fetch_add(1);
             }
         } catch (const std::exception& e) {
-            std::cerr << "[" << name_ << "] Capture error: " << e.what() << std::endl;
+            log_debug("Capture error: " + std::string(e.what()));
             error_count_.fetch_add(1);
         }
         
@@ -125,9 +124,9 @@ void IR_CaptureThread::run() {
         std::this_thread::sleep_until(sleep_until);
     }
     
-    std::cout << "[" << name_ << "] IR capture thread stopped. Frames: " 
-              << frame_count_.load() << ", Errors: " << error_count_.load()
-              << ", Discards: " << discard_count_.load() << std::endl;
+    log_debug("IR capture thread stopped. Frames: " + std::to_string(frame_count_.load()) +
+              ", Errors: " + std::to_string(error_count_.load()) + 
+              ", Discards: " + std::to_string(discard_count_.load()));
 }
 
 bool IR_CaptureThread::capture_vospi_frame() {
@@ -196,7 +195,7 @@ bool IR_CaptureThread::read_vospi_packet(uint8_t* packet_buffer) {
     transfer.tx_buf = 0; // No data to send
     transfer.rx_buf = reinterpret_cast<uintptr_t>(packet_buffer);
     transfer.len = vospi::PACKET_SIZE;
-    transfer.speed_hz = config_.spi_speed;
+    transfer.speed_hz = cfg_.spi_speed;
     transfer.bits_per_word = 8;
     
     int result = ioctl(spi_fd_, SPI_IOC_MESSAGE(1), &transfer);
@@ -266,6 +265,10 @@ uint64_t IR_CaptureThread::get_timestamp_ns() {
     auto now = std::chrono::high_resolution_clock::now();
     auto duration = now.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+}
+
+void IR_CaptureThread::log_debug(const std::string& msg) {
+    std::cout << "[" << name_ << "] " << msg << std::endl;
 }
 
 } // namespace flir

@@ -33,7 +33,7 @@ public:
     IR_TxThread(
         std::string name,
         SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb,
-        const GstConfig& gst_config
+        const GstConfig& cfg
     );
     
     // Constructor with default GStreamer configuration
@@ -55,6 +55,7 @@ private:
     void wait_for_frame();
     bool initialize_gstreamer();
     void push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle);
+    void log_debug(const std::string& msg);
 
     // === 협력자 / 구성 ===
     std::string name_;

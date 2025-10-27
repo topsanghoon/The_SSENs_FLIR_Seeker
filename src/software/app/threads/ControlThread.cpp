@@ -1,5 +1,6 @@
 #include "threads_includes/ControlThread.hpp"
 #include <cassert>
+#include <iostream>
 
 namespace flir {
 
@@ -149,6 +150,10 @@ void ControlThread::step_shutdown_fsm() {
         phase_ = SdPhase::SD_DONE;
         mode_  = Mode::SHUTDOWN;
     }
+}
+
+void ControlThread::log_debug(const std::string& msg) {
+    std::cout << "[ControlThread] " << msg << std::endl;
 }
 
 } // namespace flir

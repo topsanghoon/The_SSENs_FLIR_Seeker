@@ -109,6 +109,7 @@ private:
     void emit_lost(const cv::Rect2f& last, uint64_t ts);
     void emit_need_reselect();
     void cleanup();
+    void log_debug(const std::string& msg);
 };
 
 

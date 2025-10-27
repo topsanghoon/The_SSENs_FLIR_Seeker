@@ -6,11 +6,11 @@ namespace flir {
 
 EO_CaptureThread::EO_CaptureThread(
     std::string name,
-    SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mailbox,
-    const EOCaptureConfig& config)
+    SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mb,
+    const EOCaptureConfig& cfg)
     : name_(std::move(name))
-    , output_mailbox_(output_mailbox)
-    , config_(config)
+    , output_mb_(output_mb)
+    , cfg_(cfg)
 {
 }
 
@@ -43,26 +43,26 @@ void EO_CaptureThread::join() {
 
 bool EO_CaptureThread::initialize_camera() {
     // Open camera with V4L2 backend
-    cap_.open(config_.device_id, cv::CAP_V4L2);
+    cap_.open(cfg_.device_id, cv::CAP_V4L2);
     
     if (!cap_.isOpened()) {
-        std::cerr << "[" << name_ << "] Failed to open camera device " << config_.device_id << std::endl;
+        log_debug("Failed to open camera device " + std::to_string(cfg_.device_id));
         return false;
     }
     
     // Set capture properties
-    cap_.set(cv::CAP_PROP_FRAME_WIDTH, config_.width);
-    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, config_.height);
-    cap_.set(cv::CAP_PROP_FPS, config_.fps);
-    cap_.set(cv::CAP_PROP_FOURCC, config_.fourcc);
+    cap_.set(cv::CAP_PROP_FRAME_WIDTH, cfg_.width);
+    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, cfg_.height);
+    cap_.set(cv::CAP_PROP_FPS, cfg_.fps);
+    cap_.set(cv::CAP_PROP_FOURCC, cfg_.fourcc);
     
     // Verify settings
     int actual_width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
     int actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     double actual_fps = cap_.get(cv::CAP_PROP_FPS);
     
-    std::cout << "[" << name_ << "] Camera initialized: " << actual_width << "x" << actual_height 
-              << " @ " << actual_fps << " fps" << std::endl;
+    log_debug("Camera initialized: " + std::to_string(actual_width) + "x" + std::to_string(actual_height) 
+              + " @ " + std::to_string(actual_fps) + " fps");
     
     return true;
 }
@@ -74,9 +74,9 @@ void EO_CaptureThread::cleanup_camera() {
 }
 
 void EO_CaptureThread::run() {
-    std::cout << "[" << name_ << "] EO capture thread started" << std::endl;
+    log_debug("EO capture thread started");
     
-    auto target_period = std::chrono::microseconds(1000000 / config_.fps);
+    auto target_period = std::chrono::microseconds(1000000 / cfg_.fps);
     auto next_frame_time = std::chrono::steady_clock::now();
     
     cv::Mat yuv_frame;
@@ -87,7 +87,7 @@ void EO_CaptureThread::run() {
         try {
             // Capture frame from camera
             if (!cap_.read(yuv_frame)) {
-                std::cerr << "[" << name_ << "] Failed to capture frame" << std::endl;
+                log_debug("Failed to capture frame");
                 error_count_.fetch_add(1);
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
@@ -101,12 +101,12 @@ void EO_CaptureThread::run() {
             // Create frame handle and push to mailbox
             auto frame_handle = create_frame_handle(yuv_frame);
             if (frame_handle) {
-                output_mailbox_.push(frame_handle);
+                output_mb_.push(frame_handle);
                 frame_count_.fetch_add(1);
             }
             
         } catch (const std::exception& e) {
-            std::cerr << "[" << name_ << "] Capture error: " << e.what() << std::endl;
+            log_debug("Capture error: " + std::string(e.what()));
             error_count_.fetch_add(1);
         }
         
@@ -116,8 +116,8 @@ void EO_CaptureThread::run() {
         std::this_thread::sleep_until(sleep_until);
     }
     
-    std::cout << "[" << name_ << "] EO capture thread stopped. Frames: " 
-              << frame_count_.load() << ", Errors: " << error_count_.load() << std::endl;
+    log_debug("EO capture thread stopped. Frames: " + std::to_string(frame_count_.load()) + 
+              ", Errors: " + std::to_string(error_count_.load()));
 }
 
 std::shared_ptr<EOFrameHandle> EO_CaptureThread::create_frame_handle(const cv::Mat& yuv_frame) {
@@ -157,6 +157,10 @@ uint64_t EO_CaptureThread::get_timestamp_ns() {
     auto now = std::chrono::high_resolution_clock::now();
     auto duration = now.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+}
+
+void EO_CaptureThread::log_debug(const std::string& msg) {
+    std::cout << "[" << name_ << "] " << msg << std::endl;
 }
 
 } // namespace flir

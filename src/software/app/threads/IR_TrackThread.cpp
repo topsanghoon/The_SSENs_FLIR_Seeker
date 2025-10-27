@@ -2,6 +2,7 @@
 #include "threads_includes/IR_TrackThread.hpp"
 #include <condition_variable>
 #include <mutex>
+#include <iostream>
 
 /*
 종말 유도가 아니면 tracking 스레드에 데이터가 들어오지 않음으로 깨어날 일 없음.
@@ -225,6 +226,10 @@ void IR_TrackThread::emit_need_reselect() {
 void IR_TrackThread::cleanup() { //todo
     //tracker_.reset();     // OpenCV 트래커 해제
     //bus_.unsubscribe(...);
+}
+
+void IR_TrackThread::log_debug(const std::string& msg) {
+    std::cout << "[IR_TrackThread] " << msg << std::endl;
 }
 
 } // namespace flir

@@ -44,8 +44,8 @@ class EO_CaptureThread {
 public:
     EO_CaptureThread(
         std::string name,
-        SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mailbox,
-        const EOCaptureConfig& config = EOCaptureConfig{}
+        SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mb,
+        const EOCaptureConfig& cfg = EOCaptureConfig{}
     );
     
     ~EO_CaptureThread();
@@ -60,8 +60,8 @@ public:
     
 private:
     std::string name_;
-    SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mailbox_;
-    EOCaptureConfig config_;
+    SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mb_;
+    EOCaptureConfig cfg_;
     
     // Thread management
     std::thread th_;
@@ -81,6 +81,7 @@ private:
     void cleanup_camera();
     std::shared_ptr<EOFrameHandle> create_frame_handle(const cv::Mat& yuv_frame);
     uint64_t get_timestamp_ns();
+    void log_debug(const std::string& msg);
 };
 
 } // namespace flir

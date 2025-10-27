@@ -97,6 +97,7 @@ private:
     void send_aruco(const MetaArucoPacket& p);
     void send_ctrl (const MetaCtrlPacket&  p);
     void send_hb   (const MetaHBPacket&    p);
+    void log_debug(const std::string& msg);
 };
 
 } // namespace flir

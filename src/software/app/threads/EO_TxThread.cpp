@@ -3,16 +3,17 @@
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
+#include <iostream>
 
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
 namespace flir {
 
-EO_TxThread::EO_TxThread(std::string name, SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb, const GstConfig& gst_config)
+EO_TxThread::EO_TxThread(std::string name, SpscMailbox<std::shared_ptr<EOFrameHandle>>& mb, const GstConfig& cfg)
     : name_(std::move(name)),
       mb_(mb),
-      gst_config_(gst_config)
+      gst_config_(cfg)
 {}
 
 // Default constructor using default GstConfig values
@@ -79,8 +80,13 @@ void EO_TxThread::start() {
     th_ = std::thread(&EO_TxThread::run, this);
 }
 
-void EO_TxThread::stop() { running_.store(false); cv_.notify_one(); }
-void EO_TxThread::join() { if (th_.joinable()) th_.join(); }
+void EO_TxThread::stop() { 
+    running_.store(false); 
+    cv_.notify_one(); 
+}
+void EO_TxThread::join() { 
+    if (th_.joinable()) th_.join(); 
+}
 
 std::unique_ptr<WakeHandle> EO_TxThread::create_wake_handle() {
     return std::make_unique<WakeHandleCondVar>(cv_);
@@ -129,6 +135,7 @@ void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle
 
 // 스레드 메인 루프
 void EO_TxThread::run() {
+    log_debug("EO Tx thread started");
     while (running_.load()) {
         wait_for_frame();
         if (!running_.load()) break;
@@ -139,6 +146,11 @@ void EO_TxThread::run() {
         
         frame_seq_seen_ = mb_.latest_seq();
     }
+    log_debug("EO Tx thread stopped");
+}
+
+void EO_TxThread::log_debug(const std::string& msg) {
+    std::cout << "[" << name_ << "] " << msg << std::endl;
 }
 
 } // namespace flir

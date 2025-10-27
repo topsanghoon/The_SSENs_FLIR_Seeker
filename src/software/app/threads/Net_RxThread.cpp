@@ -20,12 +20,10 @@ Net_RxThread::~Net_RxThread() {
 
 void Net_RxThread::start() {
     if (running_.exchange(true)) {
-        log_debug("Net_RxThread already running");
         return;
     }
     
     th_ = std::thread(&Net_RxThread::run, this);
-    log_debug("Net_RxThread started");
 }
 
 void Net_RxThread::stop() {
@@ -38,14 +36,11 @@ void Net_RxThread::stop() {
         close(socket_fd_);
         socket_fd_ = -1;
     }
-    
-    log_debug("Net_RxThread stop requested");
 }
 
 void Net_RxThread::join() {
     if (th_.joinable()) {
         th_.join();
-        log_debug("Net_RxThread joined");
     }
 }
 
@@ -55,10 +50,10 @@ void Net_RxThread::run() {
     try {
         setup_socket();
         
-        log_debug("UDP socket listening on port " + std::to_string(cfg_.port));
+        log_debug("UDP socket listening on port " + std::to_string(config_.port));
         
         // Main receive loop
-        std::vector<uint8_t> buffer(cfg_.buffer_size);
+        std::vector<uint8_t> buffer(config_.buffer_size);
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
         
@@ -70,7 +65,7 @@ void Net_RxThread::run() {
             if (bytes_received > 0) {
                 received_count_.fetch_add(1);
                 
-                if (cfg_.enable_debug) {
+                if (config_.enable_debug) {
                     char client_ip[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
                     log_debug("Received " + std::to_string(bytes_received) + 
@@ -85,7 +80,7 @@ void Net_RxThread::run() {
                     cmd_mb_.push(std::move(cmd));
                     processed_count_.fetch_add(1);
                     
-                    if (cfg_.enable_debug) {
+                    if (config_.enable_debug) {
                         log_debug("Processed UserCmd: type=" + std::to_string(static_cast<int>(cmd.type)) +
                                  " box=(" + std::to_string(cmd.box.x) + "," + std::to_string(cmd.box.y) + "," +
                                  std::to_string(cmd.box.width) + "," + std::to_string(cmd.box.height) + ")" +
@@ -125,8 +120,8 @@ void Net_RxThread::setup_socket() {
     
     // Set socket to non-blocking with timeout
     struct timeval timeout;
-    timeout.tv_sec = cfg_.timeout_ms / 1000;
-    timeout.tv_usec = (cfg_.timeout_ms % 1000) * 1000;
+    timeout.tv_sec = config_.timeout_ms / 1000;
+    timeout.tv_usec = (config_.timeout_ms % 1000) * 1000;
     
     if (setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
         close(socket_fd_);
@@ -146,17 +141,17 @@ void Net_RxThread::setup_socket() {
     memset(&server_addr_, 0, sizeof(server_addr_));
     server_addr_.sin_family = AF_INET;
     server_addr_.sin_addr.s_addr = INADDR_ANY;
-    server_addr_.sin_port = htons(cfg_.port);
+    server_addr_.sin_port = htons(config_.port);
     
     // Bind socket
     if (bind(socket_fd_, (struct sockaddr*)&server_addr_, sizeof(server_addr_)) == -1) {
         close(socket_fd_);
         socket_fd_ = -1;
-        throw std::runtime_error("Failed to bind socket to port " + std::to_string(cfg_.port) + 
+        throw std::runtime_error("Failed to bind socket to port " + std::to_string(config_.port) + 
                                 ": " + std::string(strerror(errno)));
     }
     
-    log_debug("UDP socket set up successfully on port " + std::to_string(cfg_.port));
+    log_debug("UDP socket set up successfully on port " + std::to_string(config_.port));
 }
 
 void Net_RxThread::cleanup_socket() {
@@ -178,7 +173,7 @@ bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd&
             float y = u.f;
 
             if (x >= 0 && y >= 0 && x <= 4096 && y <= 4096) {
-                float s  = cfg_.click_box_size;
+                float s  = config_.click_box_size;
                 float bx = std::max(0.0f, x - s * 0.5f);
                 float by = std::max(0.0f, y - s * 0.5f);
 
@@ -186,15 +181,15 @@ bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd&
                 cmd.box  = cv::Rect2f(bx, by, s, s);
                 cmd.seq  = cmd_seq_.fetch_add(1);
 
-                if (cfg_.enable_debug) {
+                if (config_.enable_debug) {
                     log_debug("Parsed BIN CLICK x=" + std::to_string(x) + " y=" + std::to_string(y));
                 }
                 return true;
             } else {
-                if (cfg_.enable_debug) log_debug("BIN CLICK out-of-range");
+                if (config_.enable_debug) log_debug("BIN CLICK out-of-range");
             }
         } else {
-            if (cfg_.enable_debug) log_debug("Not a BIN CLICK packet (len=" + std::to_string(size) + ")");
+            if (config_.enable_debug) log_debug("Not a BIN CLICK packet (len=" + std::to_string(size) + ")");
         }
     } catch (const std::exception& e) {
         log_debug(std::string("Exception parsing user command: ") + e.what());
@@ -204,7 +199,7 @@ bool Net_RxThread::parse_user_command(const uint8_t* data, size_t size, UserCmd&
 
 
 void Net_RxThread::log_debug(const std::string& msg) {
-    if (cfg_.enable_debug) {
+    if (config_.enable_debug) {
         std::cout << "[Net_RxThread] " << msg << std::endl;
     }
 }

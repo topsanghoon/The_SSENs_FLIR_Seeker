@@ -4,16 +4,17 @@
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
+#include <iostream>
 
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
 namespace flir {
 
-IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb, const GstConfig& gst_config)
+IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb, const GstConfig& cfg)
     : name_(std::move(name)),
       mb_(mb),
-      gst_config_(gst_config)
+      gst_config_(cfg)
 {}
 
 // Default constructor using default GstConfig values
@@ -80,8 +81,13 @@ void IR_TxThread::start() {
     th_ = std::thread(&IR_TxThread::run, this);
 }
 
-void IR_TxThread::stop() { running_.store(false); cv_.notify_one(); }
-void IR_TxThread::join() { if (th_.joinable()) th_.join(); }
+void IR_TxThread::stop() { 
+    running_.store(false); 
+    cv_.notify_one();
+}
+void IR_TxThread::join() { 
+    if (th_.joinable()) th_.join();
+}
 
 std::unique_ptr<WakeHandle> IR_TxThread::create_wake_handle() {
     return std::make_unique<WakeHandleCondVar>(cv_);
@@ -129,6 +135,7 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
 
 // 스레드 메인 루프
 void IR_TxThread::run() {
+    log_debug("IR Tx thread started");
     while (running_.load()) {
         wait_for_frame();
         if (!running_.load()) break;
@@ -139,6 +146,11 @@ void IR_TxThread::run() {
         
         frame_seq_seen_ = mb_.latest_seq();
     }
+    log_debug("IR Tx thread stopped");
+}
+
+void IR_TxThread::log_debug(const std::string& msg) {
+    std::cout << "[" << name_ << "] " << msg << std::endl;
 }
 
 } // namespace flir

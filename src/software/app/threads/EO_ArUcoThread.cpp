@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <chrono>
+#include <iostream>
 
 namespace flir {
 
@@ -17,9 +18,17 @@ EO_ArUcoThread::EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_m
                                CsvLoggerAru&             logger)
 : eo_mb_(eo_mb), preproc_(preproc), detector_(detector), bus_(bus), log_(logger) {}
 
-void EO_ArUcoThread::start(){ running_.store(true); th_ = std::thread(&EO_ArUcoThread::run, this); }
-void EO_ArUcoThread::stop(){ running_.store(false); g_cv_eo.notify_all(); }
-void EO_ArUcoThread::join(){ if (th_.joinable()) th_.join(); }
+void EO_ArUcoThread::start(){ 
+    running_.store(true); 
+    th_ = std::thread(&EO_ArUcoThread::run, this); 
+}
+void EO_ArUcoThread::stop(){ 
+    running_.store(false); 
+    g_cv_eo.notify_all(); 
+}
+void EO_ArUcoThread::join(){ 
+    if (th_.joinable()) th_.join(); 
+}
 
 void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){ eo_mb_.push(h); g_cv_eo.notify_one(); }
 
@@ -70,6 +79,10 @@ void EO_ArUcoThread::emit_aruco(int id,
     ArucoEvent a{ id, corners, box, ts_ns };
     Event ev{ EventType::Aruco, a };
     bus_.push(ev, Topic::Aruco);
+}
+
+void EO_ArUcoThread::log_debug(const std::string& msg) {
+    std::cout << "[EO_ArUcoThread] " << msg << std::endl;
 }
 
 } // namespace flir

@@ -103,16 +103,16 @@ void Meta_TxThread::start() {
                 a.sin_addr.s_addr = INADDR_ANY;
                 a.sin_port        = htons(cfg_.local_port);
                 if (::bind(s, (sockaddr*)&a, sizeof(a)) != 0) {
-                    std::cerr << "[META] bind failed on :" << cfg_.local_port
-                              << " err=" << strerror(errno) << "\n";
+                    log_debug("bind failed on :" + std::to_string(cfg_.local_port) +
+                              " err=" + strerror(errno));
                 } else {
-                    std::cout << "[META] bound on :" << cfg_.local_port << "\n";
+                    log_debug("bound on :" + std::to_string(cfg_.local_port));
                 }
             }
             fds_.sock_meta = s;
             own_sock_ = true;
         } else {
-            std::cerr << "[META] socket() failed: " << strerror(errno) << "\n";
+            log_debug("socket() failed: " + std::string(strerror(errno)));
         }
     }
 
@@ -121,13 +121,13 @@ void Meta_TxThread::start() {
         sockaddr_storage dst{}; socklen_t dlen = 0;
         if (make_sockaddr_ipv4(cfg_.remote_ip, cfg_.remote_port, dst, dlen)) {
             set_meta_target(reinterpret_cast<sockaddr*>(&dst), dlen);
-            std::cout << "[META] target set to " << cfg_.remote_ip
-                      << ":" << cfg_.remote_port << "\n";
+            log_debug("target set to " + std::string(cfg_.remote_ip) + 
+                      ":" + std::to_string(cfg_.remote_port));
         } else {
-            std::cerr << "[META] invalid remote_ip: " << cfg_.remote_ip << "\n";
+            log_debug("invalid remote_ip: " + std::string(cfg_.remote_ip));
         }
     } else {
-        std::cerr << "[META] remote target not set\n";
+        log_debug("remote target not set");
     }
 
     // EVT_BUS 구독
@@ -136,8 +136,8 @@ void Meta_TxThread::start() {
     bus_.subscribe(Topic::Aruco,    &inbox_, wake_.get());
     bus_.subscribe(Topic::Control,  &inbox_, wake_.get());
 
-    std::cout << "[META] hb_period_ms=" << cfg_.hb_period_ms
-              << " remote=" << cfg_.remote_ip << ":" << cfg_.remote_port << "\n";
+    log_debug("hb_period_ms=" + std::to_string(cfg_.hb_period_ms) +
+              " remote=" + cfg_.remote_ip + ":" + std::to_string(cfg_.remote_port));
 
     th_ = std::thread(&Meta_TxThread::run, this);
 }
@@ -181,7 +181,7 @@ void Meta_TxThread::run() {
         int n = ::epoll_wait(fds_.epfd, evs, MAXE, -1);
         if (n < 0) {
             if (errno == EINTR) continue;  // 신호로 깨어난 경우
-            std::cerr << "[META] epoll_wait err: " << strerror(errno) << "\n";
+            log_debug("epoll_wait err: " + std::string(strerror(errno)));
             break;
         }
         if (n == 0) continue;
@@ -283,7 +283,7 @@ void Meta_TxThread::send_track(const MetaTrackPacket& p) {
         auto buf = build_track(p.ts, p.seq, {p.x,p.y,p.w,p.h}, p.score);
         ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
                              (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) std::cerr << "[META] send_track failed: " << strerror(errno) << "\n";
+        if (n < 0) log_debug("send_track failed: " + std::string(strerror(errno)));
     }
 }
 void Meta_TxThread::send_aruco(const MetaArucoPacket& p) {
@@ -291,7 +291,7 @@ void Meta_TxThread::send_aruco(const MetaArucoPacket& p) {
         auto buf = build_aruco(p.ts, p.id, {p.x,p.y,p.w,p.h});
         ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
                              (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) std::cerr << "[META] send_aruco failed: " << strerror(errno) << "\n";
+        if (n < 0) log_debug("send_aruco failed: " + std::string(strerror(errno)));
     }
 }
 void Meta_TxThread::send_ctrl(const MetaCtrlPacket& p) {
@@ -299,7 +299,7 @@ void Meta_TxThread::send_ctrl(const MetaCtrlPacket& p) {
         auto buf = build_ctrl(p.ts, p.state_or_cmd);
         ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
                              (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) std::cerr << "[META] send_ctrl failed: " << strerror(errno) << "\n";
+        if (n < 0) log_debug("send_ctrl failed: " + std::string(strerror(errno)));
     }
 }
 void Meta_TxThread::send_hb(const MetaHBPacket& p) {
@@ -307,8 +307,12 @@ void Meta_TxThread::send_hb(const MetaHBPacket& p) {
         auto buf = build_hb(p.ts);
         ssize_t n = ::sendto(fds_.sock_meta, buf.bytes.data(), buf.bytes.size(), 0,
                              (sockaddr*)&sa_meta_, sl_meta_);
-        if (n < 0) std::cerr << "[META] send_hb failed: " << strerror(errno) << "\n";
+        if (n < 0) log_debug("send_hb failed: " + std::string(strerror(errno)));
     }
+}
+
+void Meta_TxThread::log_debug(const std::string& msg) {
+    std::cout << "[Meta_TxThread] " << msg << std::endl;
 }
 
 } // namespace flir

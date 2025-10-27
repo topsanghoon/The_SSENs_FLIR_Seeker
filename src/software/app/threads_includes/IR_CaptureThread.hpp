@@ -53,8 +53,8 @@ class IR_CaptureThread {
 public:
     IR_CaptureThread(
         std::string name,
-        SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox,
-        const IRCaptureConfig& config = IRCaptureConfig{}
+        SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mb,
+        const IRCaptureConfig& cfg = IRCaptureConfig{}
     );
     
     ~IR_CaptureThread();
@@ -70,8 +70,8 @@ public:
     
 private:
     std::string name_;
-    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox_;
-    IRCaptureConfig config_;
+    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mb_;
+    IRCaptureConfig cfg_;
     
     // Thread management
     std::thread th_;
@@ -109,6 +109,7 @@ private:
     // Frame creation
     std::shared_ptr<IRFrameHandle> create_frame_handle();
     uint64_t get_timestamp_ns();
+    void log_debug(const std::string& msg);
 };
 
 } // namespace flir

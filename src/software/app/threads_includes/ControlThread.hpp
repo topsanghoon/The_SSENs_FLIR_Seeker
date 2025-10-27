@@ -73,6 +73,8 @@ private:
 
     void tick_run_mode();
     void step_shutdown_fsm();
+    
+    void log_debug(const std::string& msg);
 
     // Wake handle (EventBus 신호용)
     struct CvWakeHandle : public WakeHandle {
