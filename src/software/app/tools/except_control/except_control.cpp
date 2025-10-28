@@ -1,4 +1,3 @@
-// app/tools/rxtxtrack/rxtxtrack_test.cpp
 // ================================================================
 // 6개 스레드: Net_Rx, Meta_Tx, IR_Tx, EO_Tx, IR_Track, EO_ArUco
 // EO는 웹캠 캡처 → EO_Tx로 RTP JPEG 송출 + EO_ArUco에 프레임 전달(콜백)
@@ -241,7 +240,7 @@ int main(int argc, char** argv)
     flir::IRTrackConfig trk_cfg{};
     trk_cfg.user_req_threshold = 15;
 
-    flir::IR_TrackThread ir_trk(mb_ir_trk, mb_click_trk, tracker, preproc, bus, csv_logger, trk_cfg);
+    flir::IR_TrackThread ir_trk(mb_ir_trk, mb_click_trk, tracker, preproc, bus, trk_cfg);
 
     // EO ArUco (OpenCV detector 사용)
     flir::CsvLoggerAru         csv_logger_aru("/tmp/rxtxtrack_aruco.csv");
@@ -255,7 +254,7 @@ int main(int argc, char** argv)
         }
     } aruco_preproc;
 
-    flir::EO_ArUcoThread eo_aru(mb_eo_aru, aruco_preproc, aruco_detector, bus, csv_logger_aru);
+    flir::EO_ArUcoThread eo_aru(mb_eo_aru, aruco_preproc, aruco_detector, bus);
 
     try {
         // 시작

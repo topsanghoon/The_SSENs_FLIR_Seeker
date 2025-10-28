@@ -1,4 +1,4 @@
-//time_util.hpp
+// util/time_util.hpp
 #pragma once
 #include <cstdint>
 #include <chrono>
@@ -6,10 +6,14 @@
 
 namespace flir {
 
-// epoch 시간은 가끔 디버깅에 유용하므로 상시 제공(저비용)
 inline uint64_t now_ms_epoch() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+inline uint64_t now_ms_steady() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
 #if FLIR_PROFILE_ENABLED
@@ -24,7 +28,6 @@ struct ScopedTimerMs {
     }
 };
 #else
-// 프로파일 OFF일 땐 완전 제거(최적화로 사라짐)
 struct ScopedTimerMs {
     explicit ScopedTimerMs(double& ref) { (void)ref; }
     ~ScopedTimerMs() = default;

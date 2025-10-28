@@ -1,8 +1,10 @@
-//IR_TrackThread.cpp
+// IR_TrackThread.cpp  (CSV unified / CsvLoggerIR 제거)
 #include "threads_includes/IR_TrackThread.hpp"
 #include <condition_variable>
 #include <mutex>
 
+#include "util/csv_sink.hpp"   // ✅ 단일 CSV 싱크
+#include "util/telemetry.hpp"
 /*
 종말 유도가 아니면 tracking 스레드에 데이터가 들어오지 않음으로 깨어날 일 없음.
 중기 유도가 끝나면 중기 ArUco 스레드가 종료되면서 전역 변수를 바꿀것이고, 바꾸면 이후 캡쳐 과정에서 IR 프레임을
@@ -11,7 +13,7 @@
 
 namespace flir {
 
-static constexpr const char* TAG = "IR_Track";
+static constexpr const char* TAG = "IR.Track";
 
 // wake와 관리를 위한 전역 변수(프로세스 내 단일 트래커 가정)
 static std::mutex              g_m;
@@ -22,20 +24,19 @@ IR_TrackThread::IR_TrackThread(SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_m
                                ITrackerStrategy&         tracker,
                                IPreprocessor&            preproc,
                                IEventBus&                bus,
-                               CsvLoggerIR&              logger,
                                IRTrackConfig             cfg)
 : ir_mb_(ir_mb)
 , click_mb_(click_mb)
 , tracker_(tracker)
 , preproc_(preproc)
 , bus_(bus)
-, log_(logger)
 , cfg_(cfg)
 {}
 
 // start, stop, join — 스레드 제어
 void IR_TrackThread::start() {
     if (running_.exchange(true)) return;
+    CSV_LOG_SIMPLE("IR.Track", "THREAD_START", 0, 0,0,0,0, "");
     th_ = std::thread(&IR_TrackThread::run, this);
 }
 void IR_TrackThread::stop() {
@@ -44,7 +45,10 @@ void IR_TrackThread::stop() {
     g_cv.notify_all(); // 대기 중이면 깨워서 종료 경로로
 }
 void IR_TrackThread::join() {
-    if (th_.joinable()) th_.join();
+    if (th_.joinable()) {
+        th_.join();
+        CSV_LOG_SIMPLE("IR.Track", "THREAD_STOP", 0, 0,0,0,0, "");
+    }
 }
 
 /*
@@ -76,7 +80,13 @@ void IR_TrackThread::run() {
         if (auto hopt = ir_mb_.exchange(nullptr)) {
             std::shared_ptr<IRFrameHandle> h = *hopt; // tx와 공유하므로 shared_ptr
             if (h) {
-                on_frame(*h);   // 참조로 넘겨 파생형 가상함수 유지
+                double loop_ms = 0.0;
+                CSV_LOG_SIMPLE("IR.Track", "LOOP_BEGIN", h->seq, 0,0,0,0, "");
+                {
+                    ScopedTimerMs t(loop_ms);
+                    on_frame(*h);   // 참조로 넘겨 파생형 가상함수 유지
+                }
+                CSV_LOG_SIMPLE("IR.Track", "LOOP_END",   h->seq, loop_ms, 0,0,0, "");
                 h->release();   // 파생형 release() 허용(기본 no-op)
             }
         }
@@ -101,10 +111,11 @@ void IR_TrackThread::handle_click(const UserCmd& cmd) {
     fail_streak_        = 0;
     reselect_notified_  = false;
 
-    // 콘솔 로그 + CSV
+    // 콘솔 로그 + CSV(좌표/크기 4개를 v1..v4에 기록)
     LOGI(TAG, "click: (%.1f, %.1f, %.1f, %.1f) seq=%u",
          cmd.box.x, cmd.box.y, cmd.box.width, cmd.box.height, cmd.seq);
-    CSV_DO(log_.click(cmd.seq, cmd.box));
+    CSV_LOG_SIMPLE("IR.Track", "CLICK", cmd.seq,
+                   cmd.box.x, cmd.box.y, cmd.box.width, cmd.box.height, "");
 }
 
 void IR_TrackThread::on_frame(IRFrameHandle& h) {
@@ -114,6 +125,7 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
     cv::Mat pf32;
     double pre_ms = 0.0;
     { flir::ScopedTimerMs t(pre_ms); preproc_.run(*h.p, pf32); }
+    CSV_LOG_SIMPLE("IR.Track", "PRE_MS", h.seq, pre_ms, 0,0,0, "");
 
     // 2) 새 타깃 초기화 시도
     if (new_target_) {
@@ -126,19 +138,20 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
             emit_init(target_box_, h.ts);
 
             LOGI(TAG, "init OK (seq=%u, pre=%.2f ms)", h.seq, pre_ms);
-            CSV_DO(log_.init_ok(h.seq, pre_ms));
+            CSV_LOG_SIMPLE("IR.Track", "INIT_OK", h.seq, pre_ms, 0,0,0, "");
         } else {
             tracking_valid_ = false;
             new_target_     = false;
             fail_streak_++;
 
             LOGW(TAG, "init FAIL #%d (pre=%.2f ms)", fail_streak_, pre_ms);
-            CSV_DO(log_.init_fail(fail_streak_, pre_ms));
+            CSV_LOG_SIMPLE("IR.Track", "INIT_FAIL", h.seq, pre_ms, fail_streak_, 0,0, "");
 
             if (fail_streak_ == 1) emit_lost(target_box_, h.ts);
             if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
                 reselect_notified_ = true;
                 emit_need_reselect();
+                CSV_LOG_SIMPLE("IR.Track", "NEED_RESELECT", h.seq, fail_streak_, 0,0,0, "");
             }
         }
         return;
@@ -148,7 +161,7 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
     if (!tracking_valid_) {
         fail_streak_++;
         LOGW(TAG, "lost (streak=%d, pre=%.2f ms)", fail_streak_, pre_ms);
-        CSV_DO(log_.track_lost(fail_streak_, pre_ms));
+        CSV_LOG_SIMPLE("IR.Track", "LOST", h.seq, pre_ms, fail_streak_, 0,0, "");
 
         if (fail_streak_ == 1) {
             emit_lost(target_box_, h.ts); // 첫 상실만 Lost 이벤트
@@ -156,6 +169,7 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
         if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
             reselect_notified_ = true;
             emit_need_reselect();
+            CSV_LOG_SIMPLE("IR.Track", "NEED_RESELECT", h.seq, fail_streak_, 0,0,0, "");
         }
         return;
     }
@@ -165,6 +179,7 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
     double upd_ms = 0.0;
     bool ok = false;
     { flir::ScopedTimerMs t(upd_ms); ok = try_update(pf32, out, score); }
+    CSV_LOG_SIMPLE("IR.Track", "UPD_MS", h.seq, upd_ms, 0,0,0, "");
 
     if (ok) {
         target_box_        = out;
@@ -174,20 +189,27 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
 
         LOGD(TAG, "track OK (seq=%u, pre=%.2f ms, upd=%.2f ms, score=%.3f, box=%.1f,%.1f,%.1f,%.1f)",
              h.seq, pre_ms, upd_ms, score, out.x, out.y, out.width, out.height);
-        CSV_DO(log_.track_ok(h.seq, score, upd_ms));
+        // v1=score, v2=upd_ms, v3=pre_ms (후분석 가독성)
+        CSV_LOG_SIMPLE("IR.Track", "TRACK_OK", h.seq, score, upd_ms, pre_ms, 0,
+                       "x=" + std::to_string(out.x) +
+                       ",y=" + std::to_string(out.y) +
+                       ",w=" + std::to_string(out.width) +
+                       ",h=" + std::to_string(out.height));
     } else {
         tracking_valid_ = false;
         fail_streak_++;
 
         LOGW(TAG, "track LOST (seq=%u, streak=%d, pre=%.2f ms, upd=%.2f ms)",
              h.seq, fail_streak_, pre_ms, upd_ms);
-        CSV_DO(log_.track_lost(fail_streak_, pre_ms + upd_ms));
+        // v1=pre_ms, v2=upd_ms, v3=streak
+        CSV_LOG_SIMPLE("IR.Track", "TRACK_LOST", h.seq, pre_ms, upd_ms, fail_streak_, 0, "");
 
         emit_lost(target_box_, h.ts);
 
         if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
             reselect_notified_ = true;
             emit_need_reselect();
+            CSV_LOG_SIMPLE("IR.Track", "NEED_RESELECT", h.seq, fail_streak_, 0,0,0, "");
         }
     }
 }

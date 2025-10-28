@@ -1,4 +1,4 @@
-//Meta_TxThread.cpp
+// Meta_TxThread.cpp (CSV-minimal: bus IN만 기록, UDP 송신은 CSV 미기록)
 #include "threads_includes/Meta_TxThread.hpp"
 
 // 프로토콜 빌더/이벤트 페이로드 타입은 cpp에서만 include
@@ -16,6 +16,12 @@
 #include <sys/timerfd.h>
 #include <unistd.h>
 
+// ✅ 공통 유틸
+#include "util/common_log.hpp"
+#include "util/time_util.hpp"
+#include "util/csv_sink.hpp"
+#include "util/telemetry.hpp"
+
 namespace flir {
 
 namespace {
@@ -24,10 +30,6 @@ constexpr const char* TAG = "Meta_Tx";
 inline uint64_t now_ns() {
     using namespace std::chrono;
     return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
-}
-inline uint64_t now_ms_epoch() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 inline void drain_eventfd(int efd) {
     uint64_t cnt; while (::read(efd, &cnt, sizeof(cnt)) > 0) {}
@@ -68,6 +70,7 @@ void Meta_TxThread::start() {
     bus_.subscribe(Topic::Control,  &inbox_, wake_.get());
 
     hb_period_ms_ = cfg_->meta_tx.hb_period_ms;
+    CSV_LOG_SIMPLE("Meta.Tx", "THREAD_START", 0, 0,0,0,0, "");
     th_ = std::thread(&Meta_TxThread::run_, this);
 }
 
@@ -80,6 +83,7 @@ void Meta_TxThread::join() {
     if (th_.joinable()) th_.join();
     bus_.unsubscribe(&inbox_);
     wake_.reset();
+    CSV_LOG_SIMPLE("Meta.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
 }
 
 bool Meta_TxThread::init_io_() {
@@ -179,7 +183,6 @@ void Meta_TxThread::send_aruco_bbox_(uint64_t ts, int id, const cv::Rect2f& box)
                    (sockaddr*)&sa_meta_, sl_meta_);
 }
 
-
 void Meta_TxThread::on_eventfd_ready_() {
     drain_eventfd(efd_);
     while (auto ev = inbox_.exchange(nullptr)) {
@@ -187,12 +190,21 @@ void Meta_TxThread::on_eventfd_ready_() {
             case EventType::Track: {
                 const auto& x = std::get<TrackEvent>(ev->payload);
                 last_trk_ = { (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.score, x.ts, x.frame_seq };
+
+                // ✅ 버스 입력(IN)만 CSV로 기록 (UDP 송신은 CSV 미기록)
+                CSV_LOG_SIMPLE("Meta.Tx", "IN_TRACK", x.frame_seq, x.box.x, x.box.y, x.box.width, x.box.height,
+                               "score=" + std::to_string(x.score));
+
                 send_track_(x.ts, x.frame_seq, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.score);
                 break;
             }
             case EventType::Aruco: {
                 const auto& x = std::get<ArucoEvent>(ev->payload);
                 last_aru_ = { x.id, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.ts };
+
+                CSV_LOG_SIMPLE("Meta.Tx", "IN_ARUCO", 0, x.id, x.box.x, x.box.y, x.box.width,
+                               "h=" + std::to_string(x.box.height));
+
                 // ✅ 코너까지 포함해서 전송
                 send_aruco_full_(x.ts, x.id, x.box, x.corners);
                 break;
@@ -200,12 +212,18 @@ void Meta_TxThread::on_eventfd_ready_() {
             case EventType::MetaCtrl: {
                 const auto& x = std::get<MetaCtrlEvent>(ev->payload);
                 last_ctl_.last_cmd = x.cmd; last_ctl_.ts = x.ts;
+
+                CSV_LOG_SIMPLE("Meta.Tx", "IN_META_CMD", 0, (double)x.cmd, 0,0,0, "");
+
                 send_ctrl_(x.ts, x.cmd);
                 break;
             }
             case EventType::CtrlState: {
                 const auto& x = std::get<CtrlStateEvent>(ev->payload);
                 last_ctl_.state = x.state; last_ctl_.ts = x.ts;
+
+                CSV_LOG_SIMPLE("Meta.Tx", "IN_STATE", 0, (double)x.state, 0,0,0, "");
+
                 send_ctrl_(x.ts, x.state);
                 break;
             }
@@ -217,6 +235,7 @@ void Meta_TxThread::on_eventfd_ready_() {
 
 void Meta_TxThread::on_timerfd_ready_() {
     drain_timerfd(tfd_);
+    // HB 전송은 IPC이므로 CSV에 남기지 않음(요청사항). 콘솔 로그도 과도하면 생략 가능.
     send_hb_(now_ms_epoch());  // HB는 epoch ms
 }
 

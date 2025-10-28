@@ -1,9 +1,13 @@
-//EO_TxThread.cpp
+// EO_TxThread.cpp (CSV unified, no per-IPC CSV logs)
 #include "threads_includes/EO_TxThread.hpp"
 
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
+#include "util/telemetry.hpp"
+#include "util/common_log.hpp"   // LOGI/LOGD/LOGE
+#include "util/time_util.hpp"    // ScopedTimerMs
+#include "util/csv_sink.hpp"     // CSV_LOG_SIMPLE
 
 namespace flir {
 
@@ -36,7 +40,6 @@ bool EO_TxThread::initialize_gstreamer() {
         LOGI(TAG, "gst_init()");
     }
 
-    // 원래 잘 동작하던 파이프라인을 그대로 유지
     // appsrc(BGR) → videoconvert → jpegenc → udpsink
     std::stringstream ss;
     ss << "appsrc name=eo_appsrc is-live=true do-timestamp=true block=false "
@@ -89,6 +92,7 @@ void EO_TxThread::start() {
     running_.store(true);
     th_ = std::thread(&EO_TxThread::run, this);
     LOGI(TAG, "thread started");
+    CSV_LOG_SIMPLE("EO.Tx", "THREAD_START", 0, 0,0,0,0, "");
 }
 
 void EO_TxThread::stop() {
@@ -101,6 +105,7 @@ void EO_TxThread::join() {
     if (th_.joinable()) {
         th_.join();
         LOGI(TAG, "thread joined");
+        CSV_LOG_SIMPLE("EO.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
     }
 }
 
@@ -142,6 +147,7 @@ void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle
 
     const GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
     if (ret != GST_FLOW_OK) {
+        // ❗ 전송 실패는 콘솔로만 알림. CSV에는 남기지 않음(요청사항).
         LOGE(TAG, "gst_app_src_push_buffer failed: %d", (int)ret);
     } else {
         LOGD(TAG, "pushed seq=%u bytes=%u", handle->seq, buffer_size);
@@ -154,7 +160,14 @@ void EO_TxThread::run() {
         if (!running_.load()) break;
 
         if (auto handle_opt = mb_.exchange(nullptr)) {
-            push_frame_to_gst(*handle_opt);
+            const auto& handle = *handle_opt;
+            double loop_ms = 0.0;
+            CSV_LOG_SIMPLE("EO.Tx", "LOOP_BEGIN", handle->seq, 0,0,0,0, "");
+            {
+                ScopedTimerMs t(loop_ms);
+                push_frame_to_gst(handle);
+            }
+            CSV_LOG_SIMPLE("EO.Tx", "LOOP_END", handle->seq, loop_ms, 0,0,0, "");
         }
         frame_seq_seen_ = mb_.latest_seq();
     }

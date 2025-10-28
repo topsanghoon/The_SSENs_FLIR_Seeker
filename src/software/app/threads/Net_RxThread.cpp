@@ -1,4 +1,4 @@
-//Net_RxThread.cpp
+// Net_RxThread.cpp  (CSV unified: thread start/stop + per-dgram loop + CLICK_RX)
 #include "threads_includes/Net_RxThread.hpp"
 
 #include <arpa/inet.h>
@@ -11,6 +11,12 @@
 #include <sstream>
 #include <string_view>
 #include <opencv2/core.hpp>   // cv::Rect2f
+
+// ✅ 공통 유틸
+#include "util/common_log.hpp"   // LOGI/LOGW/LOGE...
+#include "util/time_util.hpp"    // ScopedTimerMs
+#include "util/csv_sink.hpp"     // CSV_LOG_SIMPLE
+#include "util/telemetry.hpp"
 
 namespace flir {
 
@@ -32,6 +38,7 @@ Net_RxThread::~Net_RxThread() {
 void Net_RxThread::start() {
     if (running_.exchange(true)) return;
     if (!init_socket_()) { running_.store(false); throw std::runtime_error("Net_RxThread socket init failed"); }
+    CSV_LOG_SIMPLE("Net.Rx", "THREAD_START", 0, 0,0,0,0, "");
     th_ = std::thread(&Net_RxThread::run_, this);
 }
 
@@ -47,6 +54,7 @@ void Net_RxThread::stop() {
 
 void Net_RxThread::join() {
     if (th_.joinable()) th_.join();
+    CSV_LOG_SIMPLE("Net.Rx", "THREAD_STOP", 0, 0,0,0,0, "");
 }
 
 bool Net_RxThread::init_socket_() {
@@ -74,6 +82,7 @@ void Net_RxThread::close_socket_() {
 
 void Net_RxThread::run_() {
     const int timeout_ms = cfg_->net_rx.timeout_ms;
+    uint32_t pkt_seq = 0;
 
     while (running_.load()) {
         pollfd pfd{ .fd = sock_, .events = POLLIN, .revents = 0 };
@@ -92,7 +101,14 @@ void Net_RxThread::run_() {
             const ssize_t n = ::recvfrom(sock_, rxbuf_.data(), rxbuf_.size(), 0, (sockaddr*)&src, &sl);
             if (n <= 0) continue;
 
-            handle_datagram_(rxbuf_.data(), static_cast<size_t>(n), src);
+            const uint32_t seq = ++pkt_seq;
+            double loop_ms = 0.0;
+            CSV_LOG_SIMPLE("Net.Rx", "LOOP_BEGIN", seq, (double)n, 0,0,0, "");
+            {
+                ScopedTimerMs t(loop_ms);
+                handle_datagram_(rxbuf_.data(), static_cast<size_t>(n), src);
+            }
+            CSV_LOG_SIMPLE("Net.Rx", "LOOP_END",   seq, loop_ms, 0,0,0, "");
         }
     }
 
@@ -120,7 +136,10 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
             cmd.box  = cv::Rect2f(fx - b*0.5f, fy - b*0.5f, b, b); // 이미 픽셀좌표로 전송됨
             cmd.seq  = ++cmd_seq_;
             outbox_.push(std::move(cmd));
+
             LOGI(TAG, "CLICK(bin C#) x=%.1f y=%.1f box=%.1f", fx, fy, b);
+            // ✅ CSV: 클릭 수신 기록
+            CSV_LOG_SIMPLE("Net.Rx", "CLICK_RX", cmd_seq_, cmd.box.x, cmd.box.y, cmd.box.width, cmd.box.height, "");
             return;
         }
         // 형식은 맞았는데 값이 비정상이면 아래 텍스트 경로로 그냥 떨어짐
@@ -138,6 +157,8 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
         UserCmd cmd{};
         if (parse_cmd_click_(msg, cmd)) {
             outbox_.push(std::move(cmd));
+            // ✅ CSV: 클릭 수신 기록
+            CSV_LOG_SIMPLE("Net.Rx", "CLICK_RX", cmd.seq, cmd.box.x, cmd.box.y, cmd.box.width, cmd.box.height, "");
             return;
         }
     }
@@ -145,7 +166,6 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
     // 3) 그 외는 조용히 드롭(스팸 방지)
     LOGW(TAG, "unrecognized msg ...");
 }
-
 
 bool Net_RxThread::parse_cmd_click_(const std::string& msg, UserCmd& out) {
     // "CLICK x y" (x,y: 픽셀 또는 정규화; 팀 규약에 맞게 사용)

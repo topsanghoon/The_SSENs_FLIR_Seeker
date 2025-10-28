@@ -3,7 +3,9 @@ file(GLOB COMPONENTS_SRC CONFIGURE_DEPENDS
   core/*.cpp
 )
 
-add_library(components STATIC ${COMPONENTS_SRC})
+add_library(components STATIC ${COMPONENTS_SRC}
+  ../util/csv_sink.cpp
+  )
 
 target_include_directories(components
   PUBLIC

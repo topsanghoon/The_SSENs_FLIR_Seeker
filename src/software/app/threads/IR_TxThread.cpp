@@ -1,10 +1,15 @@
-//IR_TxThread.cpp
+// IR_TxThread.cpp  (CSV unified, no per-IPC CSV logs)
 #include "threads_includes/IR_TxThread.hpp"
 
 #include <sstream>
 #include <chrono>
 #include <cstring>
 #include <stdexcept>
+
+#include "util/common_log.hpp"   // LOGI/LOGW/...
+#include "util/time_util.hpp"    // ScopedTimerMs
+#include "util/csv_sink.hpp"     // CSV_LOG_SIMPLE
+#include "util/telemetry.hpp"
 
 namespace flir {
 
@@ -48,6 +53,8 @@ void IR_TxThread::start() {
         throw std::runtime_error("IR pipeline init failed");
     }
     th_ = std::thread(&IR_TxThread::run, this);
+    LOGI(TAG, "thread started");
+    CSV_LOG_SIMPLE("IR.Tx", "THREAD_START", 0, 0,0,0,0, "");
 }
 
 void IR_TxThread::stop() {
@@ -57,7 +64,11 @@ void IR_TxThread::stop() {
 }
 
 void IR_TxThread::join() {
-    if (th_.joinable()) th_.join();
+    if (th_.joinable()) {
+        th_.join();
+        LOGI(TAG, "thread joined");
+        CSV_LOG_SIMPLE("IR.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
+    }
 }
 
 bool IR_TxThread::init_pipeline() {
@@ -66,7 +77,7 @@ bool IR_TxThread::init_pipeline() {
     const auto& c = cfg_->ir_tx;
     const auto [fmt_caps, bpp] = bitdepth_to_caps(c.bitDepth);
 
-    // appsrc(raw gray) → videoparse → (옵션) videoconvert → udpsink
+    // appsrc(raw gray) → udpsink
     std::ostringstream ss;
     ss << "appsrc name=ir_appsrc is-live=true do-timestamp=true block=false "
        << "! video/x-raw,format=" << fmt_caps
@@ -168,6 +179,7 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
 
     const auto flow = gst_app_src_push_buffer(appsrc_, buffer);
     if (flow != GST_FLOW_OK) {
+        // CSV에는 남기지 않음(요청사항). 콘솔로만 경고.
         LOGW(TAG, "gst_app_src_push_buffer flow=%d", flow);
     }
 }
@@ -178,7 +190,14 @@ void IR_TxThread::run() {
         if (!running_.load()) break;
 
         if (auto hopt = mb_.exchange(nullptr)) {
-            push_frame_to_gst(*hopt);
+            const auto& h = *hopt;
+            double loop_ms = 0.0;
+            CSV_LOG_SIMPLE("IR.Tx", "LOOP_BEGIN", h->seq, 0,0,0,0, "");
+            {
+                ScopedTimerMs t(loop_ms);
+                push_frame_to_gst(h);
+            }
+            CSV_LOG_SIMPLE("IR.Tx", "LOOP_END",   h->seq, loop_ms, 0,0,0, "");
         }
         frame_seq_seen_ = mb_.latest_seq();
     }

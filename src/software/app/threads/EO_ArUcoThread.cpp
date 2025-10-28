@@ -1,8 +1,9 @@
-// EO_ArUcoThread.cpp (updated)
+// EO_ArUcoThread.cpp (CSV-unified, no per-module CsvLogger)
 #include "threads_includes/EO_ArUcoThread.hpp"
-#include "components/includes/CsvLoggerAru.hpp"  // 구체 로거
-#include "util/time_util.hpp"                    // now_ms_epoch(), ScopedTimerMs
-#include "util/common_log.hpp"                  // LOGD/LOGI/...
+#include "util/telemetry.hpp"
+#include "util/time_util.hpp"                      // now_ms_epoch(), ScopedTimerMs
+#include "util/common_log.hpp"                     // LOGD/LOGI/...
+#include "util/csv_sink.hpp"                       // ✅ 단일 CSV 싱크
 
 #include <condition_variable>
 #include <mutex>
@@ -10,6 +11,7 @@
 #include <array>
 #include <optional>
 #include <vector>
+#include <algorithm>
 
 namespace flir {
 
@@ -27,13 +29,14 @@ constexpr bool kVerbosePerFrameLog = false;
 EO_ArUcoThread::EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb,
                                IArucoPreprocessor&       preproc,
                                IArucoDetector&           detector,
-                               IEventBus&                bus,
-                               CsvLoggerAru&             logger)
-: eo_mb_(eo_mb), preproc_(preproc), detector_(detector), bus_(bus), log_(logger) {}
+                               IEventBus&                bus
+                               /* CsvLoggerAru& logger 제거 */)
+: eo_mb_(eo_mb), preproc_(preproc), detector_(detector), bus_(bus) {}
 
 void EO_ArUcoThread::start(){
     running_.store(true);
     LOGI(kTAG, "start()");
+    CSV_LOG_SIMPLE("EO.Aruco", "THREAD_START", 0, 0,0,0,0, "");
     th_ = std::thread(&EO_ArUcoThread::run, this);
 }
 
@@ -47,6 +50,7 @@ void EO_ArUcoThread::join(){
     if (th_.joinable()){
         th_.join();
         LOGI(kTAG, "join() done");
+        CSV_LOG_SIMPLE("EO.Aruco", "THREAD_STOP", 0, 0,0,0,0, "");
     }
 }
 
@@ -74,14 +78,13 @@ void EO_ArUcoThread::run() {
         if (!running_.load()) break;
         if (!eo_mb_.has_new(frame_seq_seen_)) continue;
 
-        // EO_ArUcoThread.cpp - run() 내부의 프레임 처리 블록만 교체(핵심 수정)
-
         if (auto h_opt = eo_mb_.exchange(nullptr)) {
             // 옵셔널과 shared_ptr을 벗겨 실제 프레임 참조를 얻는다
             auto& sh = *h_opt;                // std::shared_ptr<EOFrameHandle>&
             const EOFrameHandle& fr = *sh;    // EOFrameHandle& → 인터페이스에 맞는 실제 객체
 
             double t_ms_total = 0.0, t_ms_pre = 0.0, t_ms_det = 0.0;
+            CSV_LOG_SIMPLE("EO.Aruco", "LOOP_BEGIN", fr.seq, 0,0,0,0, "");
             {
                 ScopedTimerMs t_all(t_ms_total);
 
@@ -89,25 +92,28 @@ void EO_ArUcoThread::run() {
                 cv::Mat pf;
                 {
                     ScopedTimerMs t_pre(t_ms_pre);
-                    preproc_.run(fr, pf);     // ✅ const EOFrameHandle& 로 전달
+                    preproc_.run(fr, pf);     // const EOFrameHandle& 로 전달
                 }
 
                 // --- 검출 ---
                 std::vector<IArucoDetector::Detection> detections;
                 {
                     ScopedTimerMs t_det(t_ms_det);
-                    detections = detector_.detect(pf); // ✅ 반환형 일치
+                    detections = detector_.detect(pf);
                 }
-
                 const bool found = !detections.empty();
 
                 if (found) {
                     for (auto& d : detections) {
-                        emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq); // ✅ fr 사용
+                        emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq);
                     }
-                    log_.marker_found(fr.seq, detections.size(), t_ms_pre + t_ms_det);
+                    // 마커 발견 이벤트: v1=pre_ms, v2=det_ms, note=개수
+                    CSV_LOG_SIMPLE("EO.Aruco", "MARKER_FOUND", fr.seq,
+                                   t_ms_pre, t_ms_det, 0, 0,
+                                   "n=" + std::to_string(detections.size()));
                 } else {
-                    log_.marker_lost(fr.seq, t_ms_pre + t_ms_det);
+                    CSV_LOG_SIMPLE("EO.Aruco", "MARKER_LOST", fr.seq,
+                                   t_ms_pre, t_ms_det, 0, 0, "");
                 }
 
                 if (kVerbosePerFrameLog) {
@@ -119,15 +125,18 @@ void EO_ArUcoThread::run() {
                                 << " n=" << detections.size();
                 }
 
-                // 통계 갱신 (그대로 유지)
+                // 통계 갱신
                 stat_frames++;
                 stat_sum_ms += t_ms_total;
                 stat_max_ms  = std::max(stat_max_ms, t_ms_total);
                 stat_min_ms  = std::min(stat_min_ms, t_ms_total);
                 if (found) stat_found++; else stat_lost++;
             }
+            // 세부 시간 측정치를 별도 이벤트로 남겨 두면 후처리 필터링이 쉬움
+            CSV_LOG_SIMPLE("EO.Aruco", "PRE_MS",   fr.seq, t_ms_pre,   0, 0, 0, "");
+            CSV_LOG_SIMPLE("EO.Aruco", "DET_MS",   fr.seq, t_ms_det,   0, 0, 0, "");
+            CSV_LOG_SIMPLE("EO.Aruco", "LOOP_END", fr.seq, t_ms_total, 0, 0, 0, "");
         }
-
 
         // 1초 주기 요약 로그
         const uint64_t now_ms = now_ms_epoch();
@@ -172,7 +181,6 @@ void EO_ArUcoThread::emit_aruco(int id,
                                 const std::array<cv::Point2f,4>& corners,
                                 const cv::Rect2f& box,
                                 uint64_t ts_ns, uint32_t frame_seq) {
-    // 간단 스트림 로그 (너무 자주면 kVerbosePerFrameLog 활용)
     if (kVerbosePerFrameLog) {
         LOGDs(kTAG) << "emit id=" << id
                     << " seq=" << frame_seq
@@ -181,9 +189,11 @@ void EO_ArUcoThread::emit_aruco(int id,
                     << "," << box.width << "x" << box.height << ")";
     }
 
+    // 이벤트 버스로 전달
     ArucoEvent a{ id, corners, box, ts_ns };
     Event ev{ EventType::Aruco, a };
     bus_.push(ev, Topic::Aruco);
+
 }
 
 } // namespace flir

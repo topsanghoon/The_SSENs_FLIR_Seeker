@@ -1,4 +1,4 @@
-//IR_TrackThread.hpp
+// IR_TrackThread.hpp  (CSV unified / CsvLoggerIR 제거)
 #pragma once
 
 #include <atomic>
@@ -10,12 +10,11 @@
 #include "ipc/mailbox.hpp"              // SpscMailbox<>
 #include "ipc/event_bus.hpp"            // IEventBus
 #include "components/includes/IR_Frame.hpp"
-#include "components/includes/CsvLoggerIR.hpp"
 
-// ✅ 공통 로거/타임/CSV 플래그
+// ✅ 공통 로거/타임/플래그
 #include "util/common_log.hpp"      // LOGD/LOGI/LOGW/LOGE
 #include "util/time_util.hpp"       // flir::ScopedTimerMs
-#include "util/telemetry.hpp"       // CSV_DO(...)
+#include "util/telemetry.hpp"       // FLIR_* 플래그
 
 namespace flir {
 
@@ -26,13 +25,14 @@ public:
     virtual bool init(const cv::Mat& pf32, const cv::Rect2f& box) = 0;
     virtual bool update(const cv::Mat& pf32, cv::Rect2f& out_box, float& score) = 0;
 };
- class IPreprocessor {
- public:
-     virtual ~IPreprocessor() = default;
+
+class IPreprocessor {
+public:
+    virtual ~IPreprocessor() = default;
 
     // 16-bit RAW 입력을 32F로 변환
     virtual void run(const IRFrame16& in, cv::Mat& out_pf32) = 0;
- };
+};
 
 // 트래커 동작 관련 간단 설정(필요 항목만 남김)
 struct IRTrackConfig {
@@ -46,7 +46,6 @@ public:
                    ITrackerStrategy&         tracker,
                    IPreprocessor&            preproc,
                    IEventBus&                bus,
-                   CsvLoggerIR&              logger,
                    IRTrackConfig             cfg);
 
     void start();
@@ -81,7 +80,6 @@ private:
     ITrackerStrategy&         tracker_;
     IPreprocessor&            preproc_;
     IEventBus&                bus_;
-    CsvLoggerIR&              log_;
     IRTrackConfig             cfg_;
 
     // 스레드
