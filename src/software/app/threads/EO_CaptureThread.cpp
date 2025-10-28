@@ -7,9 +7,11 @@ namespace flir {
 EO_CaptureThread::EO_CaptureThread(
     std::string name,
     SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mailbox,
+    std::unique_ptr<WakeHandle> wake_handle,
     const EOCaptureConfig& config)
     : name_(std::move(name))
     , output_mailbox_(output_mailbox)
+    , wake_handle_(std::move(wake_handle))
     , config_(config)
 {
 }
@@ -54,7 +56,12 @@ bool EO_CaptureThread::initialize_camera() {
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, config_.width);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, config_.height);
     cap_.set(cv::CAP_PROP_FPS, config_.fps);
-    cap_.set(cv::CAP_PROP_FOURCC, config_.fourcc);
+    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M','J','P','G'));
+    //
+    printf("%d", cap_.get(cv::CAP_PROP_FRAME_WIDTH));
+    printf("%d", cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
+    printf("%d", cap_.get(cv::CAP_PROP_FPS));
+    printf("%d", cap_.get(cv::CAP_PROP_FOURCC));
     
     // Verify settings
     int actual_width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
@@ -79,30 +86,46 @@ void EO_CaptureThread::run() {
     auto target_period = std::chrono::microseconds(1000000 / config_.fps);
     auto next_frame_time = std::chrono::steady_clock::now();
     
-    cv::Mat yuv_frame;
+    cv::Mat captured_frame;
     
     while (running_.load()) {
         auto frame_start = std::chrono::steady_clock::now();
         
         try {
             // Capture frame from camera
-            if (!cap_.read(yuv_frame)) {
+            if (!cap_.read(captured_frame)) {
                 std::cerr << "[" << name_ << "] Failed to capture frame" << std::endl;
                 error_count_.fetch_add(1);
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             
-            if (yuv_frame.empty()) {
+            if (captured_frame.empty()) {
                 error_count_.fetch_add(1);
                 continue;
             }
             
+            // Debug: Check frame format
+            static int debug_count = 0;
+            if (debug_count < 5) {
+                std::cout << "[" << name_ << "] Frame " << debug_count << ": " 
+                          << captured_frame.cols << "x" << captured_frame.rows 
+                          << " type=" << captured_frame.type() 
+                          << " channels=" << captured_frame.channels() 
+                          << " depth=" << captured_frame.depth() << std::endl;
+                debug_count++;
+            }
+            
             // Create frame handle and push to mailbox
-            auto frame_handle = create_frame_handle(yuv_frame);
+            auto frame_handle = create_frame_handle(captured_frame);
             if (frame_handle) {
                 output_mailbox_.push(frame_handle);
                 frame_count_.fetch_add(1);
+                
+                // Signal TX thread that new frame is available
+                if (wake_handle_) {
+                    wake_handle_->signal();
+                }
             }
             
         } catch (const std::exception& e) {
@@ -120,25 +143,10 @@ void EO_CaptureThread::run() {
               << frame_count_.load() << ", Errors: " << error_count_.load() << std::endl;
 }
 
-std::shared_ptr<EOFrameHandle> EO_CaptureThread::create_frame_handle(const cv::Mat& yuv_frame) {
-    // Convert YUV to BGR
-    cv::Mat bgr_frame;
-    
-    // Handle different YUV formats
-    if (yuv_frame.channels() == 2) {
-        // YUV422 format (YUYV)
-        cv::cvtColor(yuv_frame, bgr_frame, cv::COLOR_YUV2BGR_YUYV);
-    } else if (yuv_frame.channels() == 3) {
-        // Already in color format, assume BGR
-        bgr_frame = yuv_frame.clone();
-    } else {
-        // Grayscale, convert to BGR
-        cv::cvtColor(yuv_frame, bgr_frame, cv::COLOR_GRAY2BGR);
-    }
-    
-    // Create frame handle
+std::shared_ptr<EOFrameHandle> EO_CaptureThread::create_frame_handle(const cv::Mat& captured_frame) {
+    // Create frame handle directly from captured frame (MJPEG already decompressed to BGR by OpenCV)
     auto handle = std::make_shared<EOMatHandle>();
-    handle->keep = std::make_shared<cv::Mat>(bgr_frame.clone()); // Clone to own the data
+    handle->keep = std::make_shared<cv::Mat>(captured_frame.clone()); // Direct clone - no format conversion needed
     
     // Setup frame metadata
     auto& owned = handle->owned;

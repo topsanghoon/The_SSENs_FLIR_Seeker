@@ -32,7 +32,7 @@ EO_TxThread::~EO_TxThread() {
     }
 }
 
-// GStreamer 파이프라인 초기화 - YUV422를 I420로 변환하여 jpegenc 스트리밍
+// GStreamer 파이프라인 초기화 -
 bool EO_TxThread::initialize_gstreamer() {
     static bool gst_initialized = false;
     if (!gst_initialized) {
@@ -48,7 +48,7 @@ bool EO_TxThread::initialize_gstreamer() {
        << "videoconvert ! "
        << "jpegenc ! "
        << "udpsink host=" << gst_config_.pc_ip
-       << " port=" << gst_config_.port;
+       << " port=" << gst_config_.port << " sync=false";
        
     std::string pipeline_str = ss.str();
 

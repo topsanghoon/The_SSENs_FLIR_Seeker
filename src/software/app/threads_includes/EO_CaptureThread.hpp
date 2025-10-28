@@ -17,10 +17,10 @@ namespace flir {
 
 struct EOCaptureConfig {
     int device_id = 0;           // V4L2 device ID (usually /dev/video0)
-    int width = 640;             // Capture width
-    int height = 480;            // Capture height  
-    int fps = 30;                // Target frame rate
-    int fourcc = cv::VideoWriter::fourcc('Y','U','Y','V');  // YUV format
+    int width = 320;             // Capture width
+    int height = 240;            // Capture height  
+    int fps = 15;                // Target frame rate
+    int fourcc = cv::VideoWriter::fourcc('M','J','P','G');  // MJPEG format for MP4/MOV compatible cameras
 };
 
 // MatHandle implementation for EO frames
@@ -45,6 +45,7 @@ public:
     EO_CaptureThread(
         std::string name,
         SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mailbox,
+        std::unique_ptr<WakeHandle> wake_handle,
         const EOCaptureConfig& config = EOCaptureConfig{}
     );
     
@@ -61,6 +62,7 @@ public:
 private:
     std::string name_;
     SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mailbox_;
+    std::unique_ptr<WakeHandle> wake_handle_;
     EOCaptureConfig config_;
     
     // Thread management

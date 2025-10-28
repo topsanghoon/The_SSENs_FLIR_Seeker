@@ -20,11 +20,11 @@ namespace flir {
 class EO_TxThread {
 public:
     struct GstConfig {
-        std::string pc_ip = "192.168.0.179"; // 데이터를 수신할 PC의 IP 주소
+        std::string pc_ip = "192.168.0.15"; // 데이터를 수신할 PC의 IP 주소
         int         port = 5001;             // 사용할 UDP 포트 (IR과 다르게 5001)
-        int         width = 360;             // V4L2에서 받는 영상 너비
+        int         width = 320;             // V4L2에서 받는 영상 너비
         int         height = 240;            // V4L2에서 받는 영상 높이
-        int         fps = 30;                // EO 카메라 프레임 속도
+        int         fps = 15;                // EO 카메라 프레임 속도
     };
 
     // Constructor with custom GStreamer configuration
