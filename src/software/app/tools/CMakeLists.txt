@@ -8,6 +8,8 @@ add_subdirectory(eo_tx_test)
 add_subdirectory(net_rx_test)
 add_subdirectory(rxtx)
 add_subdirectory(rxtxtrack)
+add_subdirectory(eo_aruco_test)
+add_subdirectory(except_control)
 
 
 # 필요해지면 아래 주석 해제해서 확장

@@ -21,7 +21,7 @@
         "OpenCV_DIR": "/usr/local/lib/cmake/opencv4",
         "FLIR_LOG_DISABLE": "ON",
         "FLIR_CSV_DISABLE": "ON",
-        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+        "CMAKE_CXX_FLAGS_RELEASE": "-O2 -DNDEBUG"
       },
       "environment": {
         "GST_DEBUG": "0"
@@ -37,7 +37,7 @@
         "ENABLE_EO": "ON",
         "FLIR_LOG_DISABLE": "ON",
         "FLIR_CSV_DISABLE": "ON",
-        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+        "CMAKE_CXX_FLAGS_RELEASE": "-O2 -DNDEBUG"
       },
       "environment": {
         "GST_DEBUG": "0"

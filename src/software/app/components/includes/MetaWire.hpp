@@ -35,6 +35,13 @@ struct MetaBuffer { std::vector<uint8_t> bytes; };
 // 빌더: 헤더+바디를 직렬화해 MetaBuffer로 반환
 MetaBuffer build_track(uint64_t ts, uint32_t seq, const cv::Rect2f& b, float score);
 MetaBuffer build_aruco(uint64_t ts, int id, const cv::Rect2f& b);
+// ✅ 신규: corners-only
+MetaBuffer build_aruco_corners(uint64_t ts, int id, const std::array<cv::Point2f,4>& corners);
+
+// ✅ 권장: bbox + corners 동시 포함
+MetaBuffer build_aruco_full(uint64_t ts, int id,
+                         const cv::Rect2f& box,
+                         const std::array<cv::Point2f,4>& corners);
 MetaBuffer build_ctrl (uint64_t ts, int state_or_cmd);
 MetaBuffer build_hb   (uint64_t ts);
 

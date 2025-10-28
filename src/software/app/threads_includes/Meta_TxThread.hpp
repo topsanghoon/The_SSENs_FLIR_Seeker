@@ -1,3 +1,4 @@
+//Meta_TxThread.hpp
 #pragma once
 
 #include <atomic>
@@ -44,6 +45,9 @@ private:
     void send_aruco_(uint64_t ts, int id, float x, float y, float w, float h);
     void send_ctrl_(uint64_t ts, uint32_t state_or_cmd);
     void send_hb_(uint64_t ts);
+    void send_aruco_full_(uint64_t ts, int id, const cv::Rect2f& box,
+                      const std::array<cv::Point2f,4>& c);
+    void send_aruco_bbox_(uint64_t ts, int id, const cv::Rect2f& box); // optional
 
 private:
     // 의존성

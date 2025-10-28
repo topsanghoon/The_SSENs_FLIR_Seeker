@@ -1,4 +1,4 @@
-// threads_includes/EO_ArUcoThread.hpp
+//EO_ArUcoThread.hpp
 #pragma once
 #include <atomic>
 #include <thread>

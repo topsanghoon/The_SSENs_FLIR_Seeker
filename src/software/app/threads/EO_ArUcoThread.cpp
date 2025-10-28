@@ -1,14 +1,28 @@
+// EO_ArUcoThread.cpp (updated)
 #include "threads_includes/EO_ArUcoThread.hpp"
 #include "components/includes/CsvLoggerAru.hpp"  // 구체 로거
+#include "util/time_util.hpp"                    // now_ms_epoch(), ScopedTimerMs
+#include "util/common_log.hpp"                  // LOGD/LOGI/...
+
 #include <condition_variable>
 #include <mutex>
 #include <chrono>
+#include <array>
+#include <optional>
+#include <vector>
 
 namespace flir {
 
 static std::mutex              g_m_eo;
 static std::condition_variable g_cv_eo;
 using clock_t = std::chrono::steady_clock;
+
+namespace {
+constexpr const char* kTAG = "EO.Aruco";
+
+// 프레임 단위 상세 로그를 켤지(많이 시끄러울 수 있음)
+constexpr bool kVerbosePerFrameLog = false;
+} // namespace
 
 EO_ArUcoThread::EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb,
                                IArucoPreprocessor&       preproc,
@@ -17,56 +31,156 @@ EO_ArUcoThread::EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_m
                                CsvLoggerAru&             logger)
 : eo_mb_(eo_mb), preproc_(preproc), detector_(detector), bus_(bus), log_(logger) {}
 
-void EO_ArUcoThread::start(){ running_.store(true); th_ = std::thread(&EO_ArUcoThread::run, this); }
-void EO_ArUcoThread::stop(){ running_.store(false); g_cv_eo.notify_all(); }
-void EO_ArUcoThread::join(){ if (th_.joinable()) th_.join(); }
+void EO_ArUcoThread::start(){
+    running_.store(true);
+    LOGI(kTAG, "start()");
+    th_ = std::thread(&EO_ArUcoThread::run, this);
+}
 
-void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){ eo_mb_.push(h); g_cv_eo.notify_one(); }
+void EO_ArUcoThread::stop(){
+    LOGI(kTAG, "stop() requested");
+    running_.store(false);
+    g_cv_eo.notify_all();
+}
+
+void EO_ArUcoThread::join(){
+    if (th_.joinable()){
+        th_.join();
+        LOGI(kTAG, "join() done");
+    }
+}
+
+void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){
+    // 메일박스에 프레임 넣고, 대기 깨우기
+    eo_mb_.push(std::move(h));
+    g_cv_eo.notify_one();
+}
 
 void EO_ArUcoThread::run() {
+    LOGI(kTAG, "run() loop enter");
+
+    // 주기 요약 로그용 통계
+    uint64_t stat_t0_ms = now_ms_epoch();
+    uint64_t last_log_ms = stat_t0_ms;
+    uint32_t stat_frames = 0;
+    uint32_t stat_found  = 0;
+    uint32_t stat_lost   = 0;
+    double   stat_sum_ms = 0.0;
+    double   stat_max_ms = 0.0;
+    double   stat_min_ms = 1e12;
+
     while (running_.load()) {
         wait_until_ready();
         if (!running_.load()) break;
         if (!eo_mb_.has_new(frame_seq_seen_)) continue;
+
+        // EO_ArUcoThread.cpp - run() 내부의 프레임 처리 블록만 교체(핵심 수정)
+
         if (auto h_opt = eo_mb_.exchange(nullptr)) {
-            on_frame(h_opt.value());
+            // 옵셔널과 shared_ptr을 벗겨 실제 프레임 참조를 얻는다
+            auto& sh = *h_opt;                // std::shared_ptr<EOFrameHandle>&
+            const EOFrameHandle& fr = *sh;    // EOFrameHandle& → 인터페이스에 맞는 실제 객체
+
+            double t_ms_total = 0.0, t_ms_pre = 0.0, t_ms_det = 0.0;
+            {
+                ScopedTimerMs t_all(t_ms_total);
+
+                // --- 전처리 ---
+                cv::Mat pf;
+                {
+                    ScopedTimerMs t_pre(t_ms_pre);
+                    preproc_.run(fr, pf);     // ✅ const EOFrameHandle& 로 전달
+                }
+
+                // --- 검출 ---
+                std::vector<IArucoDetector::Detection> detections;
+                {
+                    ScopedTimerMs t_det(t_ms_det);
+                    detections = detector_.detect(pf); // ✅ 반환형 일치
+                }
+
+                const bool found = !detections.empty();
+
+                if (found) {
+                    for (auto& d : detections) {
+                        emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq); // ✅ fr 사용
+                    }
+                    log_.marker_found(fr.seq, detections.size(), t_ms_pre + t_ms_det);
+                } else {
+                    log_.marker_lost(fr.seq, t_ms_pre + t_ms_det);
+                }
+
+                if (kVerbosePerFrameLog) {
+                    LOGDs(kTAG) << "seq=" << fr.seq
+                                << " ts="  << fr.ts
+                                << " pre_ms=" << t_ms_pre
+                                << " det_ms=" << t_ms_det
+                                << " total_ms=" << t_ms_total
+                                << " n=" << detections.size();
+                }
+
+                // 통계 갱신 (그대로 유지)
+                stat_frames++;
+                stat_sum_ms += t_ms_total;
+                stat_max_ms  = std::max(stat_max_ms, t_ms_total);
+                stat_min_ms  = std::min(stat_min_ms, t_ms_total);
+                if (found) stat_found++; else stat_lost++;
+            }
+        }
+
+
+        // 1초 주기 요약 로그
+        const uint64_t now_ms = now_ms_epoch();
+        if (now_ms - last_log_ms >= 1000) {
+            const double elapsed_s = (now_ms - last_log_ms) / 1000.0;
+            const double fps       = stat_frames / std::max(1e-9, elapsed_s);
+            const double avg_ms    = (stat_frames ? (stat_sum_ms / stat_frames) : 0.0);
+
+            LOGI(kTAG,
+                 "FPS=%.1f frames=%u found=%u lost=%u avg=%.2fms min=%.2fms max=%.2fms (%.2fs)",
+                 fps, stat_frames, stat_found, stat_lost, avg_ms, stat_min_ms, stat_max_ms, elapsed_s);
+
+            // 리셋
+            last_log_ms = now_ms;
+            stat_frames = 0;
+            stat_found  = 0;
+            stat_lost   = 0;
+            stat_sum_ms = 0.0;
+            stat_max_ms = 0.0;
+            stat_min_ms = 1e12;
         }
     }
+
+    LOGI(kTAG, "run() loop exit");
 }
 
 void EO_ArUcoThread::wait_until_ready() {
     std::unique_lock<std::mutex> lk(g_m_eo);
     g_cv_eo.wait(lk, [&]{
-        return !running_.load() || eo_mb_.latest_seq() > frame_seq_seen_;
+        const bool ready = (!running_.load() || eo_mb_.latest_seq() > frame_seq_seen_);
+        return ready;
     });
 }
 
 void EO_ArUcoThread::on_frame(const std::shared_ptr<EOFrameHandle>& h) {
+    // 기존 단순 처리 함수는 run()에서 직접 인라인/확장 처리로 대체.
+    // 남겨두고 싶다면 여기에 공용 처리 로직을 옮겨도 됨.
     frame_seq_seen_ = h->seq;
-
-    auto t0 = clock_t::now();
-
-    cv::Mat pf;
-    preproc_.run(*h, pf);                   // BGR8 → GRAY8
-
-    auto detections = detector_.detect(pf);
-
-    const double ms = std::chrono::duration<double,std::milli>(clock_t::now() - t0).count();
-
-    if (!detections.empty()) {
-        for (auto& d : detections) {
-            emit_aruco(d.id, d.corners, d.bbox, h->ts, h->seq);
-        }
-        log_.marker_found(h->seq, detections.size(), ms);
-    } else {
-        log_.marker_lost(h->seq, ms);
-    }
 }
 
 void EO_ArUcoThread::emit_aruco(int id,
                                 const std::array<cv::Point2f,4>& corners,
                                 const cv::Rect2f& box,
-                                uint64_t ts_ns, uint32_t /*frame_seq*/) {
+                                uint64_t ts_ns, uint32_t frame_seq) {
+    // 간단 스트림 로그 (너무 자주면 kVerbosePerFrameLog 활용)
+    if (kVerbosePerFrameLog) {
+        LOGDs(kTAG) << "emit id=" << id
+                    << " seq=" << frame_seq
+                    << " ts="  << ts_ns
+                    << " box=(" << box.x << "," << box.y
+                    << "," << box.width << "x" << box.height << ")";
+    }
+
     ArucoEvent a{ id, corners, box, ts_ns };
     Event ev{ EventType::Aruco, a };
     bus_.push(ev, Topic::Aruco);

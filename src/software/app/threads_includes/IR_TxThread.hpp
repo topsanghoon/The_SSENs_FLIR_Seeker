@@ -1,3 +1,4 @@
+//IR_TxThread.hpp
 #pragma once
 
 #include <thread>
@@ -39,6 +40,7 @@ private:
     bool init_pipeline();
     void teardown_pipeline();
     void push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle);
+    
 
 private:
     // 의존성

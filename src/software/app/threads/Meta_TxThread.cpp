@@ -1,3 +1,4 @@
+//Meta_TxThread.cpp
 #include "threads_includes/Meta_TxThread.hpp"
 
 // 프로토콜 빌더/이벤트 페이로드 타입은 cpp에서만 include
@@ -159,6 +160,26 @@ void Meta_TxThread::run_() {
     LOGI(TAG, "run() exit");
 }
 
+void Meta_TxThread::send_aruco_full_(uint64_t ts, int id,
+                                     const cv::Rect2f& box,
+                                     const std::array<cv::Point2f,4>& c) {
+    if (sock_ < 0 || sl_meta_ == 0) return;
+    auto buf = build_aruco_full(ts, id, box, c);     // ★ 코너 포함
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
+                         (sockaddr*)&sa_meta_, sl_meta_);
+    if (n < 0) LOGE(TAG, "send_aruco(full) failed: %s", strerror(errno));
+    else LOGDs(TAG) << "TX ARUCO(full) bytes=" << n;
+}
+
+// (옵션) 하위호환: bbox-only 가 필요하면 이 함수도 남겨둠
+void Meta_TxThread::send_aruco_bbox_(uint64_t ts, int id, const cv::Rect2f& box) {
+    if (sock_ < 0 || sl_meta_ == 0) return;
+    auto buf = build_aruco(ts, id, box);
+    (void)::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
+                   (sockaddr*)&sa_meta_, sl_meta_);
+}
+
+
 void Meta_TxThread::on_eventfd_ready_() {
     drain_eventfd(efd_);
     while (auto ev = inbox_.exchange(nullptr)) {
@@ -172,7 +193,8 @@ void Meta_TxThread::on_eventfd_ready_() {
             case EventType::Aruco: {
                 const auto& x = std::get<ArucoEvent>(ev->payload);
                 last_aru_ = { x.id, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.ts };
-                send_aruco_(x.ts, x.id, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height);
+                // ✅ 코너까지 포함해서 전송
+                send_aruco_full_(x.ts, x.id, x.box, x.corners);
                 break;
             }
             case EventType::MetaCtrl: {
