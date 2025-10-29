@@ -1,0 +1,188 @@
+[
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/ipc/CMakeFiles/ipc.dir/event_bus_impl.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/event_bus_impl.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/event_bus_impl.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/ipc/CMakeFiles/ipc.dir/event_bus_impl.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/ActuatorPort.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/ActuatorPort.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/ActuatorPort.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/ActuatorPort.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/CsvLoggerAru.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerAru.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerAru.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/CsvLoggerAru.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/CsvLoggerCtrl.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerCtrl.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerCtrl.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/CsvLoggerCtrl.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/CsvLoggerIR.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerIR.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerIR.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/CsvLoggerIR.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/CsvLoggerMeta.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerMeta.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/CsvLoggerMeta.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/CsvLoggerMeta.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/EO_ArucoDetector_OpenCV.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/EO_ArucoDetector_OpenCV.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/EO_ArucoDetector_OpenCV.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/EO_ArucoDetector_OpenCV.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/EO_ArucoPreprocessor_OpenCV.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/EO_ArucoPreprocessor_OpenCV.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/EO_ArucoPreprocessor_OpenCV.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/EO_ArucoPreprocessor_OpenCV.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/IController.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/IController.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/IController.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/IController.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/IR_Preprocessor_LinNorm.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Preprocessor_LinNorm.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Preprocessor_LinNorm.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/IR_Preprocessor_LinNorm.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/IR_Tracker_MOSSE.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Tracker_MOSSE.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/IR_Tracker_MOSSE.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/IR_Tracker_MOSSE.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/MetaWire.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/MetaWire.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/MetaWire.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/MetaWire.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/components/CMakeFiles/components.dir/core/TargetFusion.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/TargetFusion.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/core/TargetFusion.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/components/CMakeFiles/components.dir/core/TargetFusion.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/EO_ArUcoThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_ArUcoThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_ArUcoThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/EO_ArUcoThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/EO_CaptureThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_CaptureThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_CaptureThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/EO_CaptureThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/EO_TxThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_TxThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_TxThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/EO_TxThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/IR_CaptureThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_CaptureThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_CaptureThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/IR_CaptureThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/IR_TrackThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/IR_TrackThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/IR_TxThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TxThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TxThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/IR_TxThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/Meta_TxThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/Meta_TxThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/Meta_TxThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/Meta_TxThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/threads/CMakeFiles/threads.dir/Net_RxThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/Net_RxThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/Net_RxThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/threads/CMakeFiles/threads.dir/Net_RxThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/../../ipc -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/tools/ir_trackthread/CMakeFiles/ir_thread_gui.dir/ir_thread_gui.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/ir_thread_gui.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/ir_thread_gui.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread/CMakeFiles/ir_thread_gui.dir/ir_thread_gui.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_trackthread/../../ipc -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/tools/ir_trackthread/CMakeFiles/ir_thread_gui.dir/__/__/threads/IR_TrackThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TrackThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_trackthread/CMakeFiles/ir_thread_gui.dir/__/__/threads/IR_TrackThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/../../ipc -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/tools/ir_tx_test/CMakeFiles/ir_tx_test.dir/ir_tx_test.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/ir_tx_test.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/ir_tx_test.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_tx_test/CMakeFiles/ir_tx_test.dir/ir_tx_test.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/ir_tx_test/../../ipc -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/tools/ir_tx_test/CMakeFiles/ir_tx_test.dir/__/__/threads/IR_TxThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TxThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/IR_TxThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/ir_tx_test/CMakeFiles/ir_tx_test.dir/__/__/threads/IR_TxThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/../../ipc -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/tools/eo_tx_test/CMakeFiles/eo_tx_test.dir/eo_tx_test.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/eo_tx_test.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/eo_tx_test.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_tx_test/CMakeFiles/eo_tx_test.dir/eo_tx_test.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_tx_test/../../ipc -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/tools/eo_tx_test/CMakeFiles/eo_tx_test.dir/__/__/threads/EO_TxThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_TxThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_TxThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_tx_test/CMakeFiles/eo_tx_test.dir/__/__/threads/EO_TxThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../ipc -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/tools/eo_capture_test/CMakeFiles/eo_capture_test.dir/eo_capture_test.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/eo_capture_test.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/eo_capture_test.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_capture_test/CMakeFiles/eo_capture_test.dir/eo_capture_test.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../ipc -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/tools/eo_capture_test/CMakeFiles/eo_capture_test.dir/__/__/threads/EO_CaptureThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_CaptureThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_CaptureThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_capture_test/CMakeFiles/eo_capture_test.dir/__/__/threads/EO_CaptureThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../threads_includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../components/includes -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/eo_capture_test/../../ipc -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -pthread -o app/tools/eo_capture_test/CMakeFiles/eo_capture_test.dir/__/__/threads/EO_TxThread.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_TxThread.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/EO_TxThread.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/eo_capture_test/CMakeFiles/eo_capture_test.dir/__/__/threads/EO_TxThread.cpp.o"
+},
+{
+  "directory": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug",
+  "command": "/usr/bin/c++ -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/ipc/.. -I/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/threads/.. -isystem /usr/local/include/opencv4 -O2 -pipe -g -feliminate-unused-debug-types -g -std=gnu++17 -Wall -Wextra -Wpedantic -o app/tools/net_rx_test/CMakeFiles/net_rx_test.dir/net_rx_test.cpp.o -c /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/net_rx_test/net_rx_test.cpp",
+  "file": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/tools/net_rx_test/net_rx_test.cpp",
+  "output": "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/tools/net_rx_test/CMakeFiles/net_rx_test.dir/net_rx_test.cpp.o"
+}
+]

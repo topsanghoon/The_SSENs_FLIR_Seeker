@@ -6,6 +6,7 @@
 
   "C_Cpp.intelliSenseEngine": "default",
   "C_Cpp.errorSquiggles": "enabled",
+  "C_Cpp.default.compilerPath": "/usr/bin/g++",
   "cmake.exportCompileCommandsFile": true,
 
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",

@@ -1,4 +1,4 @@
-# Install script for directory: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components
+# Install script for directory: /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/app/components
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

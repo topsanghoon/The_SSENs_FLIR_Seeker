@@ -12,9 +12,11 @@ namespace flir {
 IR_CaptureThread::IR_CaptureThread(
     std::string name,
     SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox,
+    std::unique_ptr<WakeHandle> wake_handle,
     const IRCaptureConfig& config)
     : name_(std::move(name))
     , output_mailbox_(output_mailbox)
+    , wake_handle_(std::move(wake_handle))
     , config_(config)
     , spi_fd_(-1)
     , segment_buffer_(vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE)
@@ -58,11 +60,18 @@ bool IR_CaptureThread::initialize_spi() {
     }
     
     // Set SPI mode (Mode 3: CPOL=1, CPHA=1)
+    // IMPORTANT: SPI_LSB_FIRST must NOT be set - VoSPI uses MSB first (default)
     uint8_t spi_mode = SPI_MODE_3;
     if (ioctl(spi_fd_, SPI_IOC_WR_MODE, &spi_mode) < 0) {
         std::cerr << "[" << name_ << "] Failed to set SPI mode" << std::endl;
         close(spi_fd_);
         return false;
+    }
+    
+    // Read back the mode to verify
+    uint8_t mode_check = 0;
+    if (ioctl(spi_fd_, SPI_IOC_RD_MODE, &mode_check) >= 0) {
+        std::cout << "[" << name_ << "] SPI Mode: 0x" << std::hex << (int)mode_check << std::dec << std::endl;
     }
     
     // Set bits per word (8 bits)
@@ -81,8 +90,16 @@ bool IR_CaptureThread::initialize_spi() {
         return false;
     }
     
-    std::cout << "[" << name_ << "] SPI initialized: " << config_.spi_device 
-              << " @ " << spi_speed << " Hz" << std::endl;
+    // Read back actual speed to verify (hardware may limit it)
+    uint32_t actual_speed = 0;
+    if (ioctl(spi_fd_, SPI_IOC_RD_MAX_SPEED_HZ, &actual_speed) >= 0) {
+        std::cout << "[" << name_ << "] SPI initialized: " << config_.spi_device 
+                  << " @ " << spi_speed << " Hz (requested), " 
+                  << actual_speed << " Hz (actual)" << std::endl;
+    } else {
+        std::cout << "[" << name_ << "] SPI initialized: " << config_.spi_device 
+                  << " @ " << spi_speed << " Hz" << std::endl;
+    }
     
     return true;
 }
@@ -109,6 +126,11 @@ void IR_CaptureThread::run() {
                 if (frame) {
                     output_mailbox_.push(frame);
                     frame_count_.fetch_add(1);
+                    
+                    // Signal TX thread that new frame is available
+                    if (wake_handle_) {
+                        wake_handle_->signal();
+                    }
                 }
             } else {
                 error_count_.fetch_add(1);
@@ -130,10 +152,14 @@ void IR_CaptureThread::run() {
 }
 
 bool IR_CaptureThread::capture_vospi_frame() {
-    // Capture all 4 segments for a complete frame
+    // Capture a frame
     for (int segment = 0; segment < vospi::SEGMENTS_PER_FRAME; segment++) {
         if (!capture_segment(segment)) {
             return false;
+        }
+        // Small delay between segments (if Lepton 3.5 support added later)
+        if (segment < vospi::SEGMENTS_PER_FRAME - 1) {
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
         }
     }
     
@@ -144,50 +170,87 @@ bool IR_CaptureThread::capture_vospi_frame() {
 
 bool IR_CaptureThread::capture_segment(int segment_id) {
     uint8_t packet_buffer[vospi::PACKET_SIZE];
-    int packets_received = 0;
-    int sync_attempts = 0;
-    const int MAX_SYNC_ATTEMPTS = 750; // Max attempts to find sync
+    int resets = 0;
+    const int MAX_RESETS = 750; // Match GroupGets behavior
+    static int debug_count = 0;
     
-    while (packets_received < vospi::PACKETS_PER_SEGMENT && running_.load()) {
-        if (!read_vospi_packet(packet_buffer)) {
-            return false;
-        }
+    // Simple for-loop like GroupGets, restart on mismatch
+    while (running_.load()) {
+        int packets_received = 0;
         
-        // Check for discard packets (camera not ready)
-        if (is_discard_packet(packet_buffer)) {
-            discard_count_.fetch_add(1);
-            packets_received = 0; // Reset segment capture
-            sync_attempts++;
-            if (sync_attempts > MAX_SYNC_ATTEMPTS) {
+        // Read 60 packets for this segment
+        for (int expected_line = 0; expected_line < vospi::PACKETS_PER_SEGMENT; expected_line++) {
+            if (!read_vospi_packet(packet_buffer)) {
                 return false;
             }
-            continue;
-        }
-        
-        // Get line number from packet
-        int line_number = get_packet_line_number(packet_buffer);
-        
-        // Validate line number for current segment
-        int expected_line = packets_received + (segment_id * vospi::LINES_PER_SEGMENT);
-        if (line_number != expected_line) {
-            // Out of sync, restart segment capture
-            packets_received = 0;
-            sync_attempts++;
-            if (sync_attempts > MAX_SYNC_ATTEMPTS) {
-                return false;
+            
+            // Check for discard packets (camera not ready)
+            if (is_discard_packet(packet_buffer)) {
+                discard_count_.fetch_add(1);
+                usleep(1000);
+                expected_line = -1; // Will become 0 in next iteration
+                resets++;
+                if (resets >= MAX_RESETS) {
+                    // Too many resets, wait for camera to stabilize
+                    std::this_thread::sleep_for(std::chrono::milliseconds(185));
+                    resets = 0;
+                }
+                continue;
             }
-            continue;
+            
+            // Get line number from packet
+            int line_number = get_packet_line_number(packet_buffer);
+            
+            // Debug first few iterations
+            if (debug_count < 20) {
+                std::cerr << "Line=" << line_number << " Expected=" << expected_line 
+                          << " PktsRx=" << packets_received << " Resets=" << resets << std::endl;
+                debug_count++;
+            }
+            
+            // Validate line number is in range
+            if (line_number < 0 || line_number >= vospi::LINES_PER_SEGMENT) {
+                // Invalid line number, restart frame
+                expected_line = -1; // Will become 0 in next iteration
+                resets++;
+                usleep(1000);
+                if (resets >= MAX_RESETS) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(185));
+                    resets = 0;
+                }
+                continue;
+            }
+            
+            // For Lepton 2.5 (1 segment), line_number should match expected_line
+            // Check if packet number matches expected
+            if (line_number != expected_line) {
+                // Mismatch - restart frame like GroupGets
+                expected_line = -1; // Will become 0 in next iteration  
+                resets++;
+                usleep(1000);
+                if (resets >= MAX_RESETS) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(185));
+                    resets = 0;
+                }
+                continue;
+            }
+            
+            // Valid packet! Copy payload to buffer
+            int buffer_offset = packets_received * vospi::PAYLOAD_SIZE;
+            std::memcpy(&segment_buffer_[buffer_offset], &packet_buffer[4], vospi::PAYLOAD_SIZE);
+            
+            packets_received++;
+            resets = 0; // Reset counter on successful packet
         }
         
-        // Copy packet payload to segment buffer
-        int buffer_offset = packets_received * vospi::PAYLOAD_SIZE;
-        std::memcpy(&segment_buffer_[buffer_offset], &packet_buffer[4], vospi::PAYLOAD_SIZE);
-        
-        packets_received++;
-        sync_attempts = 0; // Reset sync attempts on successful packet
+        // If we got all 60 packets, we're done!
+        if (packets_received == vospi::PACKETS_PER_SEGMENT) {
+            return true;
+        }
+        // Otherwise loop and try again
     }
     
-    return packets_received == vospi::PACKETS_PER_SEGMENT;
+    return false;
 }
 
 bool IR_CaptureThread::read_vospi_packet(uint8_t* packet_buffer) {
@@ -197,6 +260,8 @@ bool IR_CaptureThread::read_vospi_packet(uint8_t* packet_buffer) {
     transfer.len = vospi::PACKET_SIZE;
     transfer.speed_hz = config_.spi_speed;
     transfer.bits_per_word = 8;
+    transfer.cs_change = 1;      // Deassert CS after transfer (critical for VoSPI sync)
+    transfer.delay_usecs = 1;    // 1us delay after transfer
     
     int result = ioctl(spi_fd_, SPI_IOC_MESSAGE(1), &transfer);
     return result >= 0;
@@ -247,18 +312,30 @@ std::shared_ptr<IRFrameHandle> IR_CaptureThread::create_frame_handle() {
 }
 
 bool IR_CaptureThread::is_sync_packet(const uint8_t* packet) {
-    // Sync packets have line number 0x0000
+    // Sync/first packet has line number 0 (packet[1] = 0x00)
+    // For Lepton 2.5, packet[0] should be 0x00 for segment 0
     return (packet[0] == 0x00) && (packet[1] == 0x00);
 }
 
 bool IR_CaptureThread::is_discard_packet(const uint8_t* packet) {
-    // Discard packets have line number 0x0F00
-    return (packet[0] == 0x0F) && (packet[1] == 0x00);
+    // Discard packets have lower 4 bits of packet[0] == 0x0F
+    // Reference: groupgets/LeptonModule raspberrypi_capture.c line 132
+    return ((packet[0] & 0x0F) == 0x0F);
 }
 
 int IR_CaptureThread::get_packet_line_number(const uint8_t* packet) {
-    // Line number is in bytes 0-1 (big-endian format)
-    return (static_cast<int>(packet[0]) << 8) | static_cast<int>(packet[1]);
+    // Line number is in bytes 0-1 (ID field)
+    // VoSPI packet ID field format (16-bit):
+    //   Bits [7:0]: Packet/line number (0-59 for Lepton 2.5, one segment)
+    //   Bits [11:8]: Segment number (always 0 for Lepton 2.5)
+    //   Bits [15:12]: Reserved/flags
+    // 
+    // The packet bytes come over SPI in big-endian order:
+    //   packet[0] = ID[15:8] (upper byte: segment + reserved bits)
+    //   packet[1] = ID[7:0]  (lower byte: line number)
+    //
+    // For Lepton 2.5 (1 segment), we only care about packet[1] for line number
+    return static_cast<int>(packet[1]); // Line number is in lower byte (0-59)
 }
 
 uint64_t IR_CaptureThread::get_timestamp_ns() {

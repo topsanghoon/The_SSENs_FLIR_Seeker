@@ -1,4 +1,4 @@
-# Install script for directory: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software
+# Install script for directory: /home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,7 +39,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/app/cmake_install.cmake")
+  include("/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/app/cmake_install.cmake")
 endif()
 
 if(CMAKE_INSTALL_COMPONENT)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/build/debug/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

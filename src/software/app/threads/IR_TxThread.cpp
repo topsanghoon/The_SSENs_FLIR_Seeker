@@ -3,6 +3,7 @@
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
+#include <iostream>
 
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
@@ -41,31 +42,48 @@ bool IR_TxThread::initialize_gstreamer() {
     }
 
     std::stringstream ss;
-    ss << "appsrc name=ir_appsrc format=GST_FORMAT_TIME is-live=true ! "
-       << "videoparse width=" << gst_config_.width
-       << " height=" << gst_config_.height
-       << " framerate=" << gst_config_.fps << "/1"
-       << " format=gray16-le ! "
+    ss << "appsrc name=ir_appsrc is-live=true do-timestamp=true block=true format=TIME "
+       << "caps=video/x-raw,format=GRAY8,width=" << gst_config_.width
+       << ",height=" << gst_config_.height
+       << ",framerate=" << gst_config_.fps << "/1 ! "
+       << "videoconvert ! video/x-raw,format=I420 ! "
+       << "jpegenc ! rtpjpegpay pt=26 mtu=1200 ! "
        << "udpsink host=" << gst_config_.pc_ip
-       << " port=" << gst_config_.port;
+       << " port=" << gst_config_.port
+       << " sync=false async=false";
        
     std::string pipeline_str = ss.str();
+    
+    std::cout << "[" << name_ << "] GStreamer pipeline: " << pipeline_str << std::endl;
 
     GError* error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
     if (error || !pipeline_) {
-        if(error) g_error_free(error);
+        std::cerr << "[" << name_ << "] ERROR: Failed to create pipeline";
+        if (error) {
+            std::cerr << ": " << error->message;
+            g_error_free(error);
+        }
+        std::cerr << std::endl;
         return false;
     }
 
     appsrc_ = (GstAppSrc*)gst_bin_get_by_name(GST_BIN(pipeline_), "ir_appsrc");
     if (!appsrc_) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to get appsrc element" << std::endl;
         return false;
     }
     
     g_object_set(G_OBJECT(appsrc_), "block", TRUE, nullptr);
     
-    return gst_element_set_state(pipeline_, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE;
+    auto state_ret = gst_element_set_state(pipeline_, GST_STATE_PLAYING);
+    if (state_ret == GST_STATE_CHANGE_FAILURE) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to set pipeline to PLAYING state" << std::endl;
+        return false;
+    }
+    
+    std::cout << "[" << name_ << "] GStreamer pipeline started successfully" << std::endl;
+    return true;
 }
 
 // 스레드 시작
@@ -93,25 +111,47 @@ void IR_TxThread::wait_for_frame() {
 void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle) {
     if (!handle || !handle->p || !handle->p->data) return;
 
-    guint buffer_size = gst_config_.width * gst_config_.height * sizeof(uint16_t);
-
-    // GStreamer 콜백이 비동기적으로 호출되므로, shared_ptr의 생명주기를 콜백까지 연장해야 함.
-    // 힙에 shared_ptr의 복사본을 만들어 포인터를 콜백의 user_data로 전달.
-    auto* handle_copy = new std::shared_ptr<IRFrameHandle>(handle);
+    const int num_pixels = gst_config_.width * gst_config_.height;
+    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(handle->p->data);
+    
+    // Find min/max for normalization (like working lepton code)
+    uint16_t minVal = 65535, maxVal = 0;
+    for (int i = 0; i < num_pixels; ++i) {
+        if (src16[i] < minVal) minVal = src16[i];
+        if (src16[i] > maxVal) maxVal = src16[i];
+    }
+    
+    // Prevent division by zero
+    if (maxVal <= minVal) maxVal = minVal + 1;
+    
+    // Allocate GRAY8 buffer (will be freed by GStreamer callback)
+    uint8_t* gray8_data = new uint8_t[num_pixels];
+    
+    // Convert GRAY16_LE to GRAY8 with normalization
+    double scale = 255.0 / (maxVal - minVal);
+    for (int i = 0; i < num_pixels; ++i) {
+        int val = static_cast<int>((src16[i] - minVal) * scale);
+        gray8_data[i] = static_cast<uint8_t>(std::min(255, std::max(0, val)));
+    }
+    
+    // Package both buffers for cleanup
+    struct BufferCleanup {
+        uint8_t* gray8_buffer;
+        std::shared_ptr<IRFrameHandle> handle;
+    };
+    auto* cleanup_data = new BufferCleanup{gray8_data, handle};
 
     GstBuffer* buffer = gst_buffer_new_wrapped_full(
-        GST_MEMORY_FLAG_READONLY,
-        (gpointer)handle->p->data,
-        buffer_size,
+        (GstMemoryFlags)0,
+        (gpointer)gray8_data,
+        num_pixels,  // GRAY8 is 1 byte per pixel
         0,
-        buffer_size,
-        handle_copy, // 힙에 할당된 shared_ptr 포인터를 전달
+        num_pixels,
+        cleanup_data,
         [](gpointer user_data) {
-            // user_data를 원래 타입(shared_ptr 포인터)으로 캐스팅
-            auto* h_ptr = static_cast<std::shared_ptr<IRFrameHandle>*>(user_data);
-            // GStreamer가 버퍼 사용을 마쳤으므로 힙에 할당했던 shared_ptr를 delete.
-            // 이 과정에서 shared_ptr의 소멸자가 호출되어 참조 카운트가 안전하게 감소.
-            delete h_ptr;
+            auto* cleanup = static_cast<BufferCleanup*>(user_data);
+            delete[] cleanup->gray8_buffer;  // Free GRAY8 buffer
+            delete cleanup;                   // Free cleanup struct
         }
     );
 
@@ -121,22 +161,36 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
     GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
 
     if (ret != GST_FLOW_OK) {
-        // log_.error("gst_app_src_push_buffer failed with code: " + std::to_string(ret));
+        std::cerr << "[" << name_ << "] WARNING: gst_app_src_push_buffer failed with code: " << ret << std::endl;
     }
 }
 
 // 스레드 메인 루프
 void IR_TxThread::run() {
+    std::cout << "[" << name_ << "] IR TX thread started, streaming to " 
+              << gst_config_.pc_ip << ":" << gst_config_.port << std::endl;
+    
+    uint64_t frames_sent = 0;
+    
     while (running_.load()) {
         wait_for_frame();
         if (!running_.load()) break;
 
         if (auto handle_opt = mb_.exchange(nullptr)) {
             push_frame_to_gst(*handle_opt);
+            frames_sent++;
+            
+            // Debug: Print every 30 frames
+            if (frames_sent % 30 == 0) {
+                std::cout << "[" << name_ << "] Sent " << frames_sent << " frames" << std::endl;
+            }
         }
         
+        // Always update frame_seq_seen_ like EO_TxThread
         frame_seq_seen_ = mb_.latest_seq();
     }
+    
+    std::cout << "[" << name_ << "] IR TX thread stopped, total frames sent: " << frames_sent << std::endl;
 }
 
 } // namespace flir

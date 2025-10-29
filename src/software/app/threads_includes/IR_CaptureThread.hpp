@@ -13,21 +13,21 @@
 
 namespace flir {
 
-// VoSPI (Video over SPI) protocol constants for FLIR Lepton 3.0
+// VoSPI (Video over SPI) protocol constants for FLIR Lepton 2.5
 namespace vospi {
     constexpr int PACKET_SIZE = 164;           // Total packet size in bytes
     constexpr int PAYLOAD_SIZE = 160;          // Payload size per packet (80 pixels × 2 bytes)
     constexpr int PIXELS_PER_LINE = 80;        // Pixels per line in raw segment
     constexpr int LINES_PER_SEGMENT = 60;      // Lines per segment
     constexpr int PACKETS_PER_SEGMENT = 60;    // Packets per segment (1 packet per line)
-    constexpr int SEGMENTS_PER_FRAME = 4;      // Total segments per frame
-    constexpr int FRAME_WIDTH = 160;           // Final frame width after reconstruction
-    constexpr int FRAME_HEIGHT = 120;          // Final frame height after reconstruction
+    constexpr int SEGMENTS_PER_FRAME = 1;      // Total segments per frame (Lepton 2.5 uses 1 segment)
+    constexpr int FRAME_WIDTH = 80;            // Final frame width (Lepton 2.5)
+    constexpr int FRAME_HEIGHT = 60;           // Final frame height (Lepton 2.5)
 }
 
 struct IRCaptureConfig {
-    std::string spi_device = "/dev/spidev0.0";  // SPI device path
-    uint32_t spi_speed = 20000000;              // SPI speed in Hz (20MHz)
+    std::string spi_device = "/dev/spidev1.0";  // SPI device path
+    uint32_t spi_speed = 10000000;              // SPI speed in Hz (10MHz for stability)
     int fps = 9;                                // Target frame rate (Lepton 3.0 max ~9 fps)
 };
 
@@ -53,6 +53,7 @@ public:
     IR_CaptureThread(
         std::string name,
         SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox,
+        std::unique_ptr<WakeHandle> wake_handle,
         const IRCaptureConfig& config = IRCaptureConfig{}
     );
     
@@ -70,6 +71,7 @@ public:
 private:
     std::string name_;
     SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox_;
+    std::unique_ptr<WakeHandle> wake_handle_;
     IRCaptureConfig config_;
     
     // Thread management
