@@ -79,6 +79,15 @@
     "map": "cpp",
     "set": "cpp",
     "iomanip": "cpp",
-    "csignal": "cpp"
+    "csignal": "cpp",
+    "cassert": "cpp",
+    "bitset": "cpp",
+    "cinttypes": "cpp",
+    "typeindex": "cpp",
+    "compare": "cpp",
+    "concepts": "cpp",
+    "numbers": "cpp",
+    "semaphore": "cpp",
+    "stop_token": "cpp"
   }
 }

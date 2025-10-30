@@ -19,7 +19,9 @@ namespace flir {
 class ControlThread {
 public:
     struct Config {
-        int period_ms      = 20;   // 제어 주기 (50Hz)
+        int period_ms     = 200;   // 제어 주기 (50Hz)
+        int sd_quiesce_ms = 200;
+        int sd_park_ms    = 400;
     };
 
     // 기본 생성자 제거 → 반드시 Config 전달

@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <chrono>
 #include <atomic>
+#include <iostream>
 #include "components/includes/ControlDTO.hpp"
 #include "components/includes/TargetFusion.hpp" // ★ 여기에서 ObsSource를 가져옴 (재정의 금지)
 
@@ -38,16 +39,15 @@ public:
         if (s == ObsSource::ARUCO) {
             const int id = last_aruco_id_.load(std::memory_order_relaxed);
             CtrlCmd c{};
-            if (id == 1)      c.mode = +1;   // RIGHT
-            else if (id == 2) c.mode = -1;   // LEFT
+            if (id == 1)      c.mode = 1;   // RIGHT
+            else if (id == 2) c.mode = 1;   // LEFT
             else if (id == 3) {              // TRACKING 복귀
                 src_.store(ObsSource::TRACKING, std::memory_order_relaxed);
                 c.mode = 0;
-            } else            c.mode = 0;
-            c.p1 = 0.f; c.p2 = 0.f; c.p3 = 0.f;
+            } else            c.mode = 1;
+            c.p1 = 5; c.p2 = 0.f; c.p3 = 0.f;
             return c;
         }
-
         // TRACKING: 박스 중심으로 좌/우 판정
         auto b  = tf.last_box();
         float cx = b.x + b.width * 0.5f;
@@ -55,8 +55,8 @@ public:
         float err = cx - center;
 
         CtrlCmd c{};
-        if (err < -deadzone_)       c.mode = -1; // LEFT
-        else if (err >  deadzone_)  c.mode = +1; // RIGHT
+        if (err < -deadzone_)       c.mode = 1; // LEFT
+        else if (err >  deadzone_)  c.mode = 1; // RIGHT
         else                        c.mode = 0;  // CENTER
         c.p1 = err; c.p2 = 0.f; c.p3 = 0.f;
         return c;
