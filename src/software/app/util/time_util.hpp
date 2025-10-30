@@ -16,6 +16,12 @@ inline uint64_t now_ms_steady() {
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
+// ★ 추가: 장치시간(ns)
+inline uint64_t now_ns_steady() {
+    using namespace std::chrono;
+    return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 #if FLIR_PROFILE_ENABLED
 struct ScopedTimerMs {
     using Clock = std::chrono::steady_clock;

@@ -42,6 +42,11 @@ struct UserCmd {
     uint32_t    seq;
 };
 
+struct SelfDestructCmd {
+    uint32_t    seq;
+    int         level;
+};
+
 } // namespace flir
 
 // unordered_map에서 enum class Topic 사용 위한 해시

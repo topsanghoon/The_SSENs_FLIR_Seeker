@@ -1,26 +1,26 @@
 #include "threads_includes/ControlThread.hpp"
+#include "util/time_util.hpp"
 #include <cassert>
 
 namespace flir {
 
 using clock_t = std::chrono::steady_clock;
+static constexpr const char* TAG = "Control";
 
 // =====================================================
-// ControlThread: 자폭 시 단순 신호 송신 구조
+// ctor
 // =====================================================
 ControlThread::ControlThread(IEventBus& bus,
                              SpscMailbox<SelfDestructCmd>& sd_mb,
                              TargetFusion& fusion,
                              IController& controller,
                              IActuatorPort& act,
-                             CsvLoggerCtrl& logger,
                              Config cfg)
 : bus_(bus)
 , sd_mb_(sd_mb)
 , fusion_(fusion)
 , controller_(controller)
 , act_(act)
-, log_(logger)
 , cfg_(cfg)
 {
     wake_.cv = &cv_;
@@ -30,13 +30,18 @@ ControlThread::ControlThread(IEventBus& bus,
 
 // =====================================================
 void ControlThread::start() {
-    running_.store(true);
+    if (running_.exchange(true)) return;
+
     bus_.subscribe(Topic::Tracking, &inbox_, &wake_);
     bus_.subscribe(Topic::Aruco,    &inbox_, &wake_);
+
     th_ = std::thread(&ControlThread::run, this);
+
+    CSV_LOG_SIMPLE("Ctrl", "THREAD_START", 0, 0,0,0,0, "");
 }
 
 void ControlThread::stop() {
+    if (!running_.load()) return;
     running_.store(false);
     {
         std::lock_guard<std::mutex> lk(m_);
@@ -47,10 +52,12 @@ void ControlThread::stop() {
 void ControlThread::join() {
     if (th_.joinable()) th_.join();
     bus_.unsubscribe(&inbox_);
+    CSV_LOG_SIMPLE("Ctrl", "THREAD_STOP", 0, 0,0,0,0, "");
 }
 
 // =====================================================
 // ready_to_wake()
+//  - 새 이벤트 / 새 자폭 / 주기 틱 중 하나만 있어도 깸
 // =====================================================
 bool ControlThread::ready_to_wake() {
     const bool has_evt = (inbox_.latest_seq() > fusion_.last_event_seq());
@@ -70,13 +77,16 @@ void ControlThread::run() {
         }
         if (!running_.load()) break;
 
+        // 입력 처리
         handle_self_destruct();
         drain_events();
 
-        if (mode_ == Mode::RUN)
+        // 주기 제어 or SHUTDOWN FSM
+        if (mode_ == Mode::RUN) {
             tick_run_mode();
-        else
+        } else {
             step_shutdown_fsm();
+        }
 
         next_tick_tp_ = clock_t::now() + std::chrono::milliseconds(cfg_.period_ms);
     }
@@ -91,10 +101,14 @@ void ControlThread::drain_events() {
             case EventType::Track: {
                 const auto& x = std::get<TrackEvent>(ev->payload);
                 fusion_.update_with_track(x.box, x.score, x.ts, x.frame_seq);
+                CSV_LOG_SIMPLE("Ctrl", "IN_TRACK", x.frame_seq,
+                               x.box.x, x.box.y, x.box.width, x.box.height, "");
             } break;
             case EventType::Aruco: {
                 const auto& x = std::get<ArucoEvent>(ev->payload);
                 fusion_.update_with_marker(x.id, x.box, x.ts);
+                CSV_LOG_SIMPLE("Ctrl", "IN_ARUCO", (uint64_t)x.id,
+                               x.box.x, x.box.y, x.box.width, x.box.height, "");
             } break;
             default: break;
         }
@@ -112,28 +126,34 @@ void ControlThread::handle_self_destruct() {
             mode_  = Mode::SHUTDOWN;
             phase_ = SdPhase::SD_QUIESCE;
             t_phase_start_ = clock_t::now();
-            log_.sd_req(sd->seq, sd->level);
+
+            CSV_LOG_SIMPLE("Ctrl", "SD_REQ", sd->seq, (double)sd->level, 0,0,0, "");
         }
     }
 }
 
 // =====================================================
 // tick_run_mode(): 정상 제어 주기
+//  - Controller로부터 명령 계산
+//  - Meta_TxThread가 보낼 수 있게 EventBus에 MetaCtrlEvent 게시
+//  - ActuatorPort로 비차단 송신
 // =====================================================
 void ControlThread::tick_run_mode() {
     CtrlCmd cmd = controller_.solve(fusion_);
-    Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ cmd.to_int(), controller_.now_ns() } };
+    const uint64_t ts = flir::now_ns_steady();  // ★ 교체
+
+    Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ cmd.to_int(), ts } };
     bus_.push(ev, Topic::Control);
 
     act_.write_nonblock(cmd);
-    log_.ctrl_out(cmd);
+    CSV_LOG_SIMPLE("Ctrl", "CTRL_OUT", 0, (double)cmd.to_int(), 0,0,0, "");
 }
+
 
 // =====================================================
 // step_shutdown_fsm(): 단순화된 자폭 시퀀스
-// -----------------------------------------------------
-// - 아두이노가 실제 정지 수행
-// - Zynq는 자폭 신호만 송신 (mode=99)
+//  - 아두이노가 실제 정지 수행
+//  - Zynq는 자폭 신호만 송신 (특수 명령)
 // =====================================================
 void ControlThread::step_shutdown_fsm() {
     if (phase_ == SdPhase::SD_QUIESCE) {
@@ -141,10 +161,13 @@ void ControlThread::step_shutdown_fsm() {
         act_.set_quiesce(true);
 
         CtrlCmd sd = CtrlCmd::make_self_destruct();
-        act_.write_nonblock(sd);
+        const uint64_t ts = flir::now_ns_steady();  // ★ 교체
 
-        log_.phase("SELF_DESTRUCT_SENT");
-        log_.sd_done();
+        Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ sd.to_int(), ts } };
+        bus_.push(ev, Topic::Control);
+
+        act_.write_nonblock(sd);
+        CSV_LOG_SIMPLE("Ctrl", "SELF_DESTRUCT_SENT", 0, (double)sd.to_int(), 0,0,0, "");
 
         phase_ = SdPhase::SD_DONE;
         mode_  = Mode::SHUTDOWN;

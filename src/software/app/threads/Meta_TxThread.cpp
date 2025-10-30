@@ -27,10 +27,7 @@ namespace flir {
 namespace {
 constexpr const char* TAG = "Meta_Tx";
 
-inline uint64_t now_ns() {
-    using namespace std::chrono;
-    return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
-}
+
 inline void drain_eventfd(int efd) {
     uint64_t cnt; while (::read(efd, &cnt, sizeof(cnt)) > 0) {}
 }
@@ -230,7 +227,7 @@ void Meta_TxThread::on_eventfd_ready_() {
             default: break;
         }
     }
-    last_sent_ns_ = now_ns();
+    last_sent_ns_ = flir::now_ns_steady();  // ★ 교체
 }
 
 void Meta_TxThread::on_timerfd_ready_() {
