@@ -27,8 +27,12 @@ namespace vospi {
 
 struct IRCaptureConfig {
     std::string spi_device = "/dev/spidev1.0";  // SPI device path
-    uint32_t spi_speed = 10000000;              // SPI speed in Hz (10MHz for stability)
+    uint32_t spi_speed = 12500000;              // SPI speed in Hz (12.5MHz for stability)
     int fps = 9;                                // Target frame rate (Lepton 3.0 max ~9 fps)
+    // Microsecond delay after each SPI transfer. 
+    // inter-transfer delay to let the Lepton's VoSPI interface stabilize
+    // between chip-select toggles. 
+    uint32_t spi_delay_usecs = 50;              // Default 50 µs
 };
 
 // MatHandle implementation for IR frames
@@ -68,6 +72,9 @@ public:
     uint64_t get_error_count() const { return error_count_.load(); }
     uint64_t get_discard_count() const { return discard_count_.load(); }
     
+    // Camera reset
+    void reset_camera();
+    
 private:
     std::string name_;
     SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox_;
@@ -90,6 +97,11 @@ private:
     std::atomic<uint64_t> error_count_{0};
     std::atomic<uint64_t> discard_count_{0};
     std::atomic<uint32_t> sequence_{0};
+    
+    // Watchdog thread
+    std::thread watchdog_thread_;
+    std::atomic<bool> watchdog_running_{false};
+    void watchdog_run();
     
     // Internal methods
     void run();

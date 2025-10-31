@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     signal(SIGTERM, signal_handler);
     
     std::cout << "=== IR Capture & Stream Test ===\n";
-    std::cout << "Capturing from /dev/spidev1.0 (FLIR Lepton 2.5) and streaming to udp://192.168.0.15:5000\n";
+    std::cout << "Capturing from /dev/spidev1.0 (FLIR Lepton 2.5) and streaming to udp://192.168.0.16:5000\n";
     std::cout << "Press Ctrl+C to stop...\n\n";
 
     try {
@@ -40,13 +40,8 @@ int main(int argc, char** argv) {
         // Configure IR capture for /dev/spidev1.0
         flir::IRCaptureConfig capture_config;
         
-        // Configure IR TX for streaming to 192.168.0.15:5000
+        // Configure IR TX for streaming to 192.168.0.16:5000
         flir::IR_TxThread::GstConfig gst_config;
-        gst_config.pc_ip = "192.168.0.15";
-        gst_config.port = 5000;
-        gst_config.width = 80;   // Lepton 2.5
-        gst_config.height = 60;  // Lepton 2.5
-        gst_config.fps = 9;
 
         // Create TX thread first to get wake handle for capture thread
         flir::IR_TxThread tx_thread("IR_Tx", frame_mailbox, gst_config);

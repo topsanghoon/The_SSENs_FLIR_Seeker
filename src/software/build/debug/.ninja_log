@@ -87,3 +87,8 @@
 5	1210	1761705614792265865	app/tools/ir_capture_test/CMakeFiles/ir_capture_test.dir/__/__/threads/IR_CaptureThread.cpp.o	57f15c62fc86e1aa
 5	2056	1761705615648270780	app/tools/ir_capture_test/CMakeFiles/ir_capture_test.dir/ir_capture_test.cpp.o	95f7096e858cca6b
 2056	2304	1761705615896272204	app/tools/ir_capture_test/ir_capture_test	9adb65732e909e9a
+6	31	0	/home/user/THESSENS_TEST/The_SSENs_FLIR_Seeker/src/software/build/debug/CMakeFiles/cmake.verify_globs	58e5e3f7837492bb
+27	2996	1761872326723494527	app/tools/ir_capture_test/CMakeFiles/ir_capture_test.dir/__/__/threads/IR_TxThread.cpp.o	e43091356dc407e8
+27	4870	1761872328595554792	app/tools/ir_capture_test/CMakeFiles/ir_capture_test.dir/__/__/threads/IR_CaptureThread.cpp.o	57f15c62fc86e1aa
+26	6392	1761872330115604270	app/tools/ir_capture_test/CMakeFiles/ir_capture_test.dir/ir_capture_test.cpp.o	95f7096e858cca6b
+6392	6842	1761872330563618971	app/tools/ir_capture_test/ir_capture_test	9adb65732e909e9a

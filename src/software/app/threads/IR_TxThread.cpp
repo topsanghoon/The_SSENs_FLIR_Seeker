@@ -26,10 +26,35 @@ IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHa
 // 소멸자: GStreamer 리소스 정리
 IR_TxThread::~IR_TxThread() {
     stop();
+    
+    // Send EOS before joining thread
+    if (pipeline_ && appsrc_) {
+        gst_app_src_end_of_stream((GstAppSrc*)appsrc_);
+    }
+    
     join();
+    
     if (pipeline_) {
+        // Wait for EOS to propagate
+        GstBus* bus = gst_element_get_bus(pipeline_);
+        if (bus) {
+            gst_bus_timed_pop_filtered(bus, 500 * GST_MSECOND, 
+                                       (GstMessageType)(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+            gst_object_unref(bus);
+        }
+        
+        // Proper shutdown sequence
         gst_element_set_state(pipeline_, GST_STATE_NULL);
+        
+        // Wait for state change to complete
+        GstStateChangeReturn ret = gst_element_get_state(pipeline_, nullptr, nullptr, GST_SECOND);
+        if (ret == GST_STATE_CHANGE_FAILURE) {
+            std::cerr << "[" << name_ << "] WARNING: Failed to set pipeline to NULL state" << std::endl;
+        }
+        
         gst_object_unref(pipeline_);
+        pipeline_ = nullptr;
+        appsrc_ = nullptr;
     }
 }
 
@@ -114,46 +139,46 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
     const int num_pixels = gst_config_.width * gst_config_.height;
     const uint16_t* src16 = reinterpret_cast<const uint16_t*>(handle->p->data);
     
-    // Find min/max for normalization (like working lepton code)
+    // Find current frame min/max (per-frame normalization)
     uint16_t minVal = 65535, maxVal = 0;
     for (int i = 0; i < num_pixels; ++i) {
         if (src16[i] < minVal) minVal = src16[i];
         if (src16[i] > maxVal) maxVal = src16[i];
     }
     
-    // Prevent division by zero
+    // Add margin for better contrast
+    int range = maxVal - minVal;
+    double margin = range * 0.1;
+    if (margin < 100) margin = 100;
+    
+    minVal = std::max(0, static_cast<int>(minVal) - static_cast<int>(margin));
+    maxVal = std::min(16383, static_cast<int>(maxVal) + static_cast<int>(margin));
+    
     if (maxVal <= minVal) maxVal = minVal + 1;
     
-    // Allocate GRAY8 buffer (will be freed by GStreamer callback)
-    uint8_t* gray8_data = new uint8_t[num_pixels];
+    // Create GStreamer buffer and map for writing
+    GstBuffer* buffer = gst_buffer_new_allocate(nullptr, num_pixels, nullptr);
+    if (!buffer) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to allocate GStreamer buffer" << std::endl;
+        return;
+    }
     
-    // Convert GRAY16_LE to GRAY8 with normalization
+    GstMapInfo map;
+    if (!gst_buffer_map(buffer, &map, GST_MAP_WRITE)) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to map GStreamer buffer" << std::endl;
+        gst_buffer_unref(buffer);
+        return;
+    }
+    
+    // Convert GRAY16_LE to GRAY8 directly into GStreamer buffer
+    uint8_t* gray8_data = map.data;
     double scale = 255.0 / (maxVal - minVal);
     for (int i = 0; i < num_pixels; ++i) {
         int val = static_cast<int>((src16[i] - minVal) * scale);
         gray8_data[i] = static_cast<uint8_t>(std::min(255, std::max(0, val)));
     }
     
-    // Package both buffers for cleanup
-    struct BufferCleanup {
-        uint8_t* gray8_buffer;
-        std::shared_ptr<IRFrameHandle> handle;
-    };
-    auto* cleanup_data = new BufferCleanup{gray8_data, handle};
-
-    GstBuffer* buffer = gst_buffer_new_wrapped_full(
-        (GstMemoryFlags)0,
-        (gpointer)gray8_data,
-        num_pixels,  // GRAY8 is 1 byte per pixel
-        0,
-        num_pixels,
-        cleanup_data,
-        [](gpointer user_data) {
-            auto* cleanup = static_cast<BufferCleanup*>(user_data);
-            delete[] cleanup->gray8_buffer;  // Free GRAY8 buffer
-            delete cleanup;                   // Free cleanup struct
-        }
-    );
+    gst_buffer_unmap(buffer, &map);
 
     GST_BUFFER_PTS(buffer) = handle->ts;
     GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, gst_config_.fps);
