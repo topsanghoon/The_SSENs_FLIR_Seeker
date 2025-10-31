@@ -4,6 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <iostream>
+#include <cstring>
 
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
@@ -66,16 +67,15 @@ bool IR_TxThread::initialize_gstreamer() {
         gst_initialized = true;
     }
 
-    std::stringstream ss;
-    ss << "appsrc name=ir_appsrc is-live=true do-timestamp=true block=true format=TIME "
-       << "caps=video/x-raw,format=GRAY8,width=" << gst_config_.width
-       << ",height=" << gst_config_.height
-       << ",framerate=" << gst_config_.fps << "/1 ! "
-       << "videoconvert ! video/x-raw,format=I420 ! "
-       << "jpegenc ! rtpjpegpay pt=26 mtu=1200 ! "
-       << "udpsink host=" << gst_config_.pc_ip
-       << " port=" << gst_config_.port
-       << " sync=false async=false";
+         // Send raw 16-bit little-endian grayscale frames directly over UDP.
+         std::stringstream ss;
+         ss << "appsrc name=ir_appsrc is-live=true do-timestamp=true block=true format=TIME "
+             << "caps=video/x-raw,format=GRAY16_LE,width=" << gst_config_.width
+             << ",height=" << gst_config_.height
+             << ",framerate=" << gst_config_.fps << "/1 ! "
+             << "udpsink host=" << gst_config_.pc_ip
+             << " port=" << gst_config_.port
+             << " sync=false async=false";
        
     std::string pipeline_str = ss.str();
     
@@ -136,55 +136,31 @@ void IR_TxThread::wait_for_frame() {
 void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle) {
     if (!handle || !handle->p || !handle->p->data) return;
 
+    // Push raw 16-bit little-endian frame directly
     const int num_pixels = gst_config_.width * gst_config_.height;
     const uint16_t* src16 = reinterpret_cast<const uint16_t*>(handle->p->data);
-    
-    // Find current frame min/max (per-frame normalization)
-    uint16_t minVal = 65535, maxVal = 0;
-    for (int i = 0; i < num_pixels; ++i) {
-        if (src16[i] < minVal) minVal = src16[i];
-        if (src16[i] > maxVal) maxVal = src16[i];
-    }
-    
-    // Add margin for better contrast
-    int range = maxVal - minVal;
-    double margin = range * 0.1;
-    if (margin < 100) margin = 100;
-    
-    minVal = std::max(0, static_cast<int>(minVal) - static_cast<int>(margin));
-    maxVal = std::min(16383, static_cast<int>(maxVal) + static_cast<int>(margin));
-    
-    if (maxVal <= minVal) maxVal = minVal + 1;
-    
-    // Create GStreamer buffer and map for writing
-    GstBuffer* buffer = gst_buffer_new_allocate(nullptr, num_pixels, nullptr);
+
+    const size_t buf_bytes = static_cast<size_t>(num_pixels) * sizeof(uint16_t);
+    GstBuffer* buffer = gst_buffer_new_allocate(nullptr, buf_bytes, nullptr);
     if (!buffer) {
         std::cerr << "[" << name_ << "] ERROR: Failed to allocate GStreamer buffer" << std::endl;
         return;
     }
-    
+
     GstMapInfo map;
     if (!gst_buffer_map(buffer, &map, GST_MAP_WRITE)) {
         std::cerr << "[" << name_ << "] ERROR: Failed to map GStreamer buffer" << std::endl;
         gst_buffer_unref(buffer);
         return;
     }
-    
-    // Convert GRAY16_LE to GRAY8 directly into GStreamer buffer
-    uint8_t* gray8_data = map.data;
-    double scale = 255.0 / (maxVal - minVal);
-    for (int i = 0; i < num_pixels; ++i) {
-        int val = static_cast<int>((src16[i] - minVal) * scale);
-        gray8_data[i] = static_cast<uint8_t>(std::min(255, std::max(0, val)));
-    }
-    
+
+    std::memcpy(map.data, reinterpret_cast<const uint8_t*>(src16), buf_bytes);
     gst_buffer_unmap(buffer, &map);
 
     GST_BUFFER_PTS(buffer) = handle->ts;
     GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, gst_config_.fps);
 
     GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
-
     if (ret != GST_FLOW_OK) {
         std::cerr << "[" << name_ << "] WARNING: gst_app_src_push_buffer failed with code: " << ret << std::endl;
     }

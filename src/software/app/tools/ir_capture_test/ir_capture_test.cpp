@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     signal(SIGTERM, signal_handler);
     
     std::cout << "=== IR Capture & Stream Test ===\n";
-    std::cout << "Capturing from /dev/spidev1.0 (FLIR Lepton 2.5) and streaming to udp://192.168.0.16:5000\n";
+    std::cout << "Capturing from /dev/spidev1.0 (FLIR Lepton 2.5) and streaming to udp://192.168.0.17:5002\n";
     std::cout << "Press Ctrl+C to stop...\n\n";
 
     try {
@@ -54,10 +54,10 @@ int main(int argc, char** argv) {
         capture_thread.start();
         tx_thread.start();
 
-        std::cout << "[INFO] Pipeline started. Capturing from FLIR Lepton 2.5 and streaming...\n";
-        std::cout << "[INFO] View stream with: gst-launch-1.0 udpsrc port=5000 ! "
-                  << "application/x-rtp,encoding-name=JPEG,payload=26 ! "
-                  << "rtpjpegdepay ! jpegdec ! videoconvert ! autovideosink\n\n";
+            std::cout << "[INFO] Pipeline started. Capturing from FLIR Lepton 2.5 and streaming...\n";
+            std::cout << "[INFO] View stream with: gst-launch-1.0 -v udpsrc port=5002 "
+                      << "caps=\"video/x-raw,format=GRAY16_LE,width=80,height=60,framerate=9/1\" ! "
+                      << "appsink name=sinkLeft\n\n";
 
         // Simple monitoring loop
         auto start_time = std::chrono::steady_clock::now();

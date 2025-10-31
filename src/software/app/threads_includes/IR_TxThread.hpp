@@ -22,8 +22,8 @@ namespace flir {
 class IR_TxThread {
 public:
     struct GstConfig {
-        std::string pc_ip = "192.168.0.16"; // 데이터를 수신할 PC의 IP 주소
-        int         port = 5000;             // 사용할 UDP 포트
+        std::string pc_ip = "192.168.0.17"; // 데이터를 수신할 PC의 IP 주소
+        int         port = 5002;             // 사용할 UDP 포트 (matches receiver udpsrc port=5002)
         int         width = 80;              // 영상 너비 (Lepton 2.5)
         int         height = 60;             // 영상 높이 (Lepton 2.5)
         int         fps = 9;                 // Lepton 2.5의 프레임 속도
