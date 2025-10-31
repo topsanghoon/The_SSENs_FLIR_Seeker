@@ -1,270 +1,143 @@
+// threads_includes/IR_CaptureThread.cpp
 #include "threads_includes/IR_CaptureThread.hpp"
-#include <iostream>
-#include <chrono>
-#include <cstring>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
+#include <cstring>
+#include <cstdio>
+#include <thread>
+using namespace std::chrono_literals;
 
 namespace flir {
 
-IR_CaptureThread::IR_CaptureThread(
-    std::string name,
-    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox,
-    const IRCaptureConfig& config)
-    : name_(std::move(name))
-    , output_mailbox_(output_mailbox)
-    , config_(config)
-    , spi_fd_(-1)
-    , segment_buffer_(vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE)
-    , frame_buffer_(vospi::FRAME_WIDTH * vospi::FRAME_HEIGHT)
+static inline bool is_discard(const uint8_t* p) { return (p[0]==0x0F) && ((p[1]&0xF0)==0xF0); }
+static inline int  line_num (const uint8_t* p) { return ((p[0]&0x0F)<<8) | p[1]; } // 0..59
+
+IR_CaptureThread::IR_CaptureThread(std::string name,
+                                   SpscMailbox<std::shared_ptr<IRFrameHandle>>& out,
+                                   AppConfigPtr app)
+: name_(std::move(name)), out_(out), app_(std::move(app))
 {
+    const int W = app_->ir_tx.frame.width;
+    const int H = app_->ir_tx.frame.height;
+    frame_buf_.resize(W * H);
+    pkt_.resize(164);
 }
 
-IR_CaptureThread::~IR_CaptureThread() {
-    stop();
-    join();
-    cleanup_spi();
-}
+IR_CaptureThread::~IR_CaptureThread() { stop(); join(); }
 
 void IR_CaptureThread::start() {
-    if (th_.joinable()) return;
-    
-    if (!initialize_spi()) {
-        throw std::runtime_error("IR_CaptureThread failed to initialize SPI");
-    }
-    
-    running_.store(true);
+    if (running_.exchange(true)) return;
     th_ = std::thread(&IR_CaptureThread::run, this);
 }
 
-void IR_CaptureThread::stop() {
-    running_.store(false);
-}
+void IR_CaptureThread::stop() { running_.store(false); }
 
-void IR_CaptureThread::join() {
-    if (th_.joinable()) {
-        th_.join();
-    }
-}
+void IR_CaptureThread::join() { if (th_.joinable()) th_.join(); }
 
-bool IR_CaptureThread::initialize_spi() {
-    // Open SPI device
-    spi_fd_ = open(config_.spi_device.c_str(), O_RDWR);
-    if (spi_fd_ < 0) {
-        std::cerr << "[" << name_ << "] Failed to open SPI device: " << config_.spi_device << std::endl;
-        return false;
-    }
-    
-    // Set SPI mode (Mode 3: CPOL=1, CPHA=1)
-    uint8_t spi_mode = SPI_MODE_3;
-    if (ioctl(spi_fd_, SPI_IOC_WR_MODE, &spi_mode) < 0) {
-        std::cerr << "[" << name_ << "] Failed to set SPI mode" << std::endl;
-        close(spi_fd_);
-        return false;
-    }
-    
-    // Set bits per word (8 bits)
-    uint8_t bits_per_word = 8;
-    if (ioctl(spi_fd_, SPI_IOC_WR_BITS_PER_WORD, &bits_per_word) < 0) {
-        std::cerr << "[" << name_ << "] Failed to set SPI bits per word" << std::endl;
-        close(spi_fd_);
-        return false;
-    }
-    
-    // Set SPI speed
-    uint32_t spi_speed = config_.spi_speed;
-    if (ioctl(spi_fd_, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed) < 0) {
-        std::cerr << "[" << name_ << "] Failed to set SPI speed" << std::endl;
-        close(spi_fd_);
-        return false;
-    }
-    
-    std::cout << "[" << name_ << "] SPI initialized: " << config_.spi_device 
-              << " @ " << spi_speed << " Hz" << std::endl;
-    
+bool IR_CaptureThread::init_spi() {
+    spi_fd_ = ::open("/dev/spidev0.0", O_RDWR); // 필요시 AppConfig로 경로/속도 확장
+    if (spi_fd_ < 0) return false;
+    uint8_t mode = SPI_MODE_3, bits = 8; uint32_t speed = 20000000;
+    ioctl(spi_fd_, SPI_IOC_WR_MODE, &mode);
+    ioctl(spi_fd_, SPI_IOC_WR_BITS_PER_WORD, &bits);
+    ioctl(spi_fd_, SPI_IOC_WR_MAX_SPEED_HZ, &speed);
     return true;
 }
 
-void IR_CaptureThread::cleanup_spi() {
-    if (spi_fd_ >= 0) {
-        close(spi_fd_);
-        spi_fd_ = -1;
+void IR_CaptureThread::close_spi() {
+    if (spi_fd_ >= 0) { ::close(spi_fd_); spi_fd_ = -1; }
+}
+
+bool IR_CaptureThread::read_packet(uint8_t* buf, size_t len) {
+    if (spi_fd_ < 0) return false;
+    const ssize_t n = ::read(spi_fd_, buf, len);
+    return n == (ssize_t)len;
+}
+
+bool IR_CaptureThread::capture_frame_25() {
+    // Lepton 2.5: 80x60 → 60 패킷
+    const int W = 80, H = 60;
+    int lines = 0;
+    while (lines < H && running_) {
+        if (!read_packet(pkt_.data(), pkt_.size())) return false;
+        if (is_discard(pkt_.data())) continue;
+        int ln = line_num(pkt_.data()); if (ln < 0 || ln >= 60) continue;
+        std::memcpy(&frame_buf_[ln * W], pkt_.data() + 4, W * 2);
+        ++lines;
     }
+    return (lines == H);
+}
+
+bool IR_CaptureThread::capture_frame_30() {
+    // Lepton 3.0: 160x120 → 4 세그먼트 × 60 패킷
+    const int W = 160, segH = 60;
+    static thread_local std::vector<uint16_t> seg(W * segH);
+    for (int s = 0; s < 4 && running_; ++s) {
+        int lines = 0;
+        while (lines < segH && running_) {
+            if (!read_packet(pkt_.data(), pkt_.size())) return false;
+            if (is_discard(pkt_.data())) continue;
+            int ln = line_num(pkt_.data()); if (ln < 0 || ln >= 60) continue;
+            std::memcpy(&seg[ln * W], pkt_.data() + 4, W * 2);
+            ++lines;
+        }
+        std::memcpy(&frame_buf_[s * segH * W], seg.data(), W * segH * 2);
+    }
+    return true;
+}
+
+bool IR_CaptureThread::capture_frame_any() {
+    const auto& sz = app_->ir_tx.frame;
+    if (sz.width == 80 && sz.height == 60) return capture_frame_25();
+    return capture_frame_30();
+}
+
+std::shared_ptr<IRFrameHandle> IR_CaptureThread::make_handle() {
+    const int W = app_->ir_tx.frame.width;
+    const int H = app_->ir_tx.frame.height;
+
+    // frame_buf_ → Mat 래핑 후 clone해서 수명 보장
+    cv::Mat tmp(H, W, CV_16UC1, frame_buf_.data());
+    auto h = std::make_shared<IRMatHandle>();
+    h->keep = std::make_shared<cv::Mat>(tmp.clone());
+
+    h->owned.data   = reinterpret_cast<uint16_t*>(h->keep->data);
+    h->owned.width  = h->keep->cols;
+    h->owned.height = h->keep->rows;
+    h->owned.step   = static_cast<int>(h->keep->step);
+    return h;
 }
 
 void IR_CaptureThread::run() {
-    std::cout << "[" << name_ << "] IR capture thread started" << std::endl;
-    
-    auto target_period = std::chrono::microseconds(1000000 / config_.fps);
-    auto next_frame_time = std::chrono::steady_clock::now();
-    
-    while (running_.load()) {
-        auto frame_start = std::chrono::steady_clock::now();
-        
-        try {
-            if (capture_vospi_frame()) {
-                auto frame = create_frame_handle();
-                if (frame) {
-                    output_mailbox_.push(frame);
-                    frame_count_.fetch_add(1);
-                }
-            } else {
-                error_count_.fetch_add(1);
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "[" << name_ << "] Capture error: " << e.what() << std::endl;
-            error_count_.fetch_add(1);
-        }
-        
-        // Frame rate control
-        next_frame_time += target_period;
-        auto sleep_until = std::max(next_frame_time, frame_start + std::chrono::microseconds(1000));
-        std::this_thread::sleep_until(sleep_until);
+    if (!init_spi()) {
+        std::fprintf(stderr, "[IR_Cap] SPI open fail\n");
+        running_.store(false);
+        return;
     }
-    
-    std::cout << "[" << name_ << "] IR capture thread stopped. Frames: " 
-              << frame_count_.load() << ", Errors: " << error_count_.load()
-              << ", Discards: " << discard_count_.load() << std::endl;
-}
 
-bool IR_CaptureThread::capture_vospi_frame() {
-    // Capture all 4 segments for a complete frame
-    for (int segment = 0; segment < vospi::SEGMENTS_PER_FRAME; segment++) {
-        if (!capture_segment(segment)) {
-            return false;
+    uint64_t cnt_log = 0;
+
+    while (running_) {
+        // Producer 게이트: 종말 단계에서만 캡처/전달
+        if (!ir_enabled()) { std::this_thread::sleep_for(2ms); continue; }
+
+        if (!capture_frame_any()) { error_count_++; continue; }
+
+        auto h = make_handle();
+        out_.push(h);
+        frame_count_++;
+
+        // 최소 디버그(60프레임마다 1줄)
+        if ((++cnt_log % 60) == 0) {
+            std::fprintf(stderr, "[IR_Cap] frames=%llu (%dx%d)\n",
+                (unsigned long long)frame_count_.load(),
+                app_->ir_tx.frame.width, app_->ir_tx.frame.height);
         }
     }
-    
-    // Reconstruct the complete 160x120 frame
-    reconstruct_frame();
-    return true;
-}
 
-bool IR_CaptureThread::capture_segment(int segment_id) {
-    uint8_t packet_buffer[vospi::PACKET_SIZE];
-    int packets_received = 0;
-    int sync_attempts = 0;
-    const int MAX_SYNC_ATTEMPTS = 750; // Max attempts to find sync
-    
-    while (packets_received < vospi::PACKETS_PER_SEGMENT && running_.load()) {
-        if (!read_vospi_packet(packet_buffer)) {
-            return false;
-        }
-        
-        // Check for discard packets (camera not ready)
-        if (is_discard_packet(packet_buffer)) {
-            discard_count_.fetch_add(1);
-            packets_received = 0; // Reset segment capture
-            sync_attempts++;
-            if (sync_attempts > MAX_SYNC_ATTEMPTS) {
-                return false;
-            }
-            continue;
-        }
-        
-        // Get line number from packet
-        int line_number = get_packet_line_number(packet_buffer);
-        
-        // Validate line number for current segment
-        int expected_line = packets_received + (segment_id * vospi::LINES_PER_SEGMENT);
-        if (line_number != expected_line) {
-            // Out of sync, restart segment capture
-            packets_received = 0;
-            sync_attempts++;
-            if (sync_attempts > MAX_SYNC_ATTEMPTS) {
-                return false;
-            }
-            continue;
-        }
-        
-        // Copy packet payload to segment buffer
-        int buffer_offset = packets_received * vospi::PAYLOAD_SIZE;
-        std::memcpy(&segment_buffer_[buffer_offset], &packet_buffer[4], vospi::PAYLOAD_SIZE);
-        
-        packets_received++;
-        sync_attempts = 0; // Reset sync attempts on successful packet
-    }
-    
-    return packets_received == vospi::PACKETS_PER_SEGMENT;
-}
-
-bool IR_CaptureThread::read_vospi_packet(uint8_t* packet_buffer) {
-    struct spi_ioc_transfer transfer = {};
-    transfer.tx_buf = 0; // No data to send
-    transfer.rx_buf = reinterpret_cast<uintptr_t>(packet_buffer);
-    transfer.len = vospi::PACKET_SIZE;
-    transfer.speed_hz = config_.spi_speed;
-    transfer.bits_per_word = 8;
-    
-    int result = ioctl(spi_fd_, SPI_IOC_MESSAGE(1), &transfer);
-    return result >= 0;
-}
-
-void IR_CaptureThread::reconstruct_frame() {
-    // Convert segment buffer data to frame buffer
-    for (int segment = 0; segment < vospi::SEGMENTS_PER_FRAME; segment++) {
-        for (int line = 0; line < vospi::LINES_PER_SEGMENT; line++) {
-            int frame_line = segment * vospi::LINES_PER_SEGMENT + line;
-            int segment_offset = (segment * vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE) + 
-                                (line * vospi::PAYLOAD_SIZE);
-            
-            // Copy pixel data (80 pixels × 2 bytes = 160 bytes per line)
-            for (int pixel = 0; pixel < vospi::PIXELS_PER_LINE; pixel++) {
-                int frame_pixel_idx = frame_line * vospi::FRAME_WIDTH + pixel;
-                int segment_byte_idx = segment_offset + (pixel * 2);
-                
-                // Convert big-endian to little-endian
-                uint16_t pixel_value = (static_cast<uint16_t>(segment_buffer_[segment_byte_idx]) << 8) |
-                                      static_cast<uint16_t>(segment_buffer_[segment_byte_idx + 1]);
-                
-                frame_buffer_[frame_pixel_idx] = pixel_value;
-            }
-        }
-    }
-}
-
-std::shared_ptr<IRFrameHandle> IR_CaptureThread::create_frame_handle() {
-    // Create OpenCV Mat from frame buffer
-    cv::Mat thermal_frame(vospi::FRAME_HEIGHT, vospi::FRAME_WIDTH, CV_16UC1, frame_buffer_.data());
-    
-    // Create frame handle
-    auto handle = std::make_shared<IRMatHandle>();
-    handle->keep = std::make_shared<cv::Mat>(thermal_frame.clone()); // Clone to own the data
-    
-    // Setup frame metadata
-    auto& owned = handle->owned;
-    owned.data = reinterpret_cast<uint16_t*>(handle->keep->data);
-    owned.width = handle->keep->cols;
-    owned.height = handle->keep->rows;
-    owned.step = static_cast<int>(handle->keep->step);
-    
-    handle->seq = sequence_.fetch_add(1);
-    handle->ts = get_timestamp_ns();
-    
-    return handle;
-}
-
-bool IR_CaptureThread::is_sync_packet(const uint8_t* packet) {
-    // Sync packets have line number 0x0000
-    return (packet[0] == 0x00) && (packet[1] == 0x00);
-}
-
-bool IR_CaptureThread::is_discard_packet(const uint8_t* packet) {
-    // Discard packets have line number 0x0F00
-    return (packet[0] == 0x0F) && (packet[1] == 0x00);
-}
-
-int IR_CaptureThread::get_packet_line_number(const uint8_t* packet) {
-    // Line number is in bytes 0-1 (big-endian format)
-    return (static_cast<int>(packet[0]) << 8) | static_cast<int>(packet[1]);
-}
-
-uint64_t IR_CaptureThread::get_timestamp_ns() {
-    auto now = std::chrono::high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+    close_spi();
 }
 
 } // namespace flir

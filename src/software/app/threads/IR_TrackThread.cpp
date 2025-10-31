@@ -5,6 +5,7 @@
 
 #include "util/csv_sink.hpp"   // ✅ 단일 CSV 싱크
 #include "util/telemetry.hpp"
+#include "phase_gate.hpp"
 /*
 종말 유도가 아니면 tracking 스레드에 데이터가 들어오지 않음으로 깨어날 일 없음.
 중기 유도가 끝나면 중기 ArUco 스레드가 종료되면서 전역 변수를 바꿀것이고, 바꾸면 이후 캡쳐 과정에서 IR 프레임을
@@ -67,6 +68,8 @@ void IR_TrackThread::onClickArrived(const UserCmd& cmd) {
 // 메인 루프
 void IR_TrackThread::run() {
     while (running_.load()) {
+        if (!flir::ir_enabled()) { std::unique_lock<std::mutex> lk(g_m); g_cv.wait_for(lk, std::chrono::milliseconds(5)); continue; }
+
         wait_until_ready();
         if (!running_.load()) break;
 

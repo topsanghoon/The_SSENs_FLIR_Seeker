@@ -4,6 +4,7 @@
 #include "util/time_util.hpp"                      // now_ms_epoch(), ScopedTimerMs
 #include "util/common_log.hpp"                     // LOGD/LOGI/...
 #include "util/csv_sink.hpp"                       // ✅ 단일 CSV 싱크
+#include "phase_gate.hpp"
 
 #include <condition_variable>
 #include <mutex>
@@ -74,6 +75,8 @@ void EO_ArUcoThread::run() {
     double   stat_min_ms = 1e12;
 
     while (running_.load()) {
+        if (!flir::eo_enabled()) { std::unique_lock<std::mutex> lk(g_m_eo); g_cv_eo.wait_for(lk, std::chrono::milliseconds(5)); continue; }
+
         wait_until_ready();
         if (!running_.load()) break;
         if (!eo_mb_.has_new(frame_seq_seen_)) continue;
