@@ -1,4 +1,3 @@
-//IR_CaptureThread.cpp
 #include "threads_includes/IR_CaptureThread.hpp"
 #include <iostream>
 #include <chrono>

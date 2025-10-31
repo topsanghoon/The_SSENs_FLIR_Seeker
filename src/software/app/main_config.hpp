@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <cstdint>
+#include "guidance_mode.hpp"
 
 namespace flir {
 
@@ -41,12 +42,25 @@ struct NetRxConfigDI {
     float    click_box_size{64.0f};
 };
 
+struct GuidanceConfig {
+    GuidancePhase default_phase{GuidancePhase::Midcourse};
+    int  terminal_marker_id{3};  // 종말 전환 대상 마커 ID
+    // 절대 크기(px) 기준
+    int  min_bbox_w{160};
+    int  min_bbox_h{160};
+    int  min_big_frames{5};      // “충분히 큼” 연속 프레임 수
+    int  lost_timeout_ms{300};   // 큰 상태 이후 미검출 지속 시간
+    // (선택) 프레임 비율 기준: max(bw/W,bh/H) >= min_bbox_frac
+    float min_bbox_frac{0.0f};   // 0이면 비활성
+};
+
 struct AppConfig {
     PathsConfig     paths;
     IRTxConfig      ir_tx;
     EOTxConfig      eo_tx;
     MetaTxConfigDI  meta_tx;
     NetRxConfigDI   net_rx;
+    GuidanceConfig  guidance;
 };
 
 using AppConfigPtr = std::shared_ptr<const AppConfig>;

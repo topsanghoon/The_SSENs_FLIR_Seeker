@@ -5,30 +5,39 @@
 #include <mutex>
 #include <chrono>
 
-#include "ipc/ipc_types.hpp"     // Event, EventType, MetaCtrlEvent, Topics, SelfDestructCmd
-#include "ipc/mailbox.hpp"       // SpscMailbox
-#include "ipc/event_bus.hpp"     // IEventBus, WakeHandle
 
-#include "components/includes/ControlDTO.hpp"   // CtrlCmd
+#include "ipc/ipc_types.hpp"
+#include "ipc/mailbox.hpp"
+#include "ipc/event_bus.hpp"
+
+#include "components/includes/ControlDTO.hpp"
 #include "components/includes/TargetFusion.hpp"
 #include "components/includes/IController.hpp"
 #include "components/includes/ActuatorPort.hpp"
 
-// 로그/타임 (단일 CSV 싱크 매크로)
-#include "util/telemetry.hpp"    // CSV_LOG_SIMPLE
-#include "util/time_util.hpp"    // now_ns()
+#include "util/telemetry.hpp"
+#include "util/time_util.hpp"
+
+// ★ 추가
+#include "guidance_mode.hpp"
+#include "main_config.hpp"  // GuidanceConfig를 사용하기 위함
 
 namespace flir {
 
 class ControlThread {
 public:
     struct Config {
-        int period_ms     = 20;   // 50Hz (기존 주석은 200이었지만 50Hz면 20ms 주기)
+        int period_ms     = 20;   // 50Hz
         int sd_quiesce_ms = 200;
         int sd_park_ms    = 400;
+
+        // ★ 전환 기준(상위 AppConfig.guidance 주입값을 그대로 복사 보관)
+        GuidanceConfig guidance{};
+        // EO 프레임 크기(비율 판단용). AppConfig.eo_tx.frame를 넘겨 유지
+        int eo_w{640};
+        int eo_h{480};
     };
 
-    // 기본 생성자 제거 → 반드시 Config 전달
     ControlThread(IEventBus&                    bus,
                   SpscMailbox<SelfDestructCmd>& sd_mb,
                   TargetFusion&                 fusion,
@@ -45,8 +54,8 @@ private:
 
     // 협력자
     IEventBus&                    bus_;
-    SpscMailbox<Event>            inbox_;     // Tracking/Aruco 입력
-    SpscMailbox<SelfDestructCmd>& sd_mb_;     // 자폭 명령 입력
+    SpscMailbox<Event>            inbox_;
+    SpscMailbox<SelfDestructCmd>& sd_mb_;
     TargetFusion&                 fusion_;
     IController&                  controller_;
     IActuatorPort&                act_;
@@ -69,6 +78,11 @@ private:
 
     clock_t::time_point next_tick_tp_{clock_t::now()};
 
+    // ★ 중기→종말 전환 판별 상태
+    int                   big_cnt_ = 0;
+    bool                  big_reached_ = false;
+    clock_t::time_point   last_seen_tp_{};
+
     void run();
     bool ready_to_wake();
 
@@ -78,7 +92,11 @@ private:
     void tick_run_mode();
     void step_shutdown_fsm();
 
-    // Wake handle (EventBus 신호용)
+    // ★ 전환 관련 헬퍼
+    void on_aruco_for_transition(int id, const cv::Rect& box, uint64_t ts_ns);
+    bool is_big_enough(int bw, int bh) const;
+
+    // Wake handle
     struct CvWakeHandle : public WakeHandle {
         std::condition_variable* cv{};
         std::mutex*              mu{};

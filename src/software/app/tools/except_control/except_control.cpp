@@ -23,7 +23,7 @@
 #include "threads_includes/IR_TxThread.hpp"
 #include "threads_includes/EO_TxThread.hpp"
 #include "threads_includes/IR_TrackThread.hpp"
-#include "threads_includes/EO_ArUcoThread.hpp"   // ★ 추가
+#include "threads_includes/EO_ArUcoThread.hpp"
 #include "threads_includes/Net_RxThread.hpp"
 #include "threads_includes/Meta_TxThread.hpp"
 
@@ -31,9 +31,7 @@
 #include "components/includes/EO_Frame.hpp"
 #include "components/includes/IR_Preprocessor.hpp"
 #include "components/includes/IR_Tracker_MOSSE.hpp"
-#include "components/includes/EO_ArucoDetector_OpenCV.hpp" // ★ 추가(오픈CV 디텍터)
-#include "components/includes/CsvLoggerIR.hpp"
-#include "components/includes/CsvLoggerAru.hpp"            // ★ 추가(아루코 로거)
+#include "components/includes/EO_ArucoDetector_OpenCV.hpp"
 
 #include "ipc/ipc_types.hpp"
 #include "ipc/mailbox.hpp"
@@ -139,10 +137,10 @@ static void run_eo_camera_producer(int cam_index,
 
         // 1) EO_Tx로 전송
         mb_tx.push(h);
-        if (wake_tx) wake_tx->signal(); // ★ EO_TxThread 깨우기
+        if (wake_tx) wake_tx->signal(); // EO_TxThread 깨우기
 
         // 2) EO_ArUcoThread에 프레임 투입(= 내부에서 push+notify)
-        aruco_push(h); // ★ 핵심
+        aruco_push(h);
 
         int elapsed = (int)std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - t0).count();
@@ -235,7 +233,6 @@ int main(int argc, char** argv)
 
     flir::IR_Preprocessor preproc(1.0f/16383.0f, 0.0f);
     flir::IR_Tracker_MOSSE tracker;
-    flir::CsvLoggerIR      csv_logger("/tmp/rxtxtrack_track.csv");
 
     flir::IRTrackConfig trk_cfg{};
     trk_cfg.user_req_threshold = 15;
@@ -243,7 +240,6 @@ int main(int argc, char** argv)
     flir::IR_TrackThread ir_trk(mb_ir_trk, mb_click_trk, tracker, preproc, bus, trk_cfg);
 
     // EO ArUco (OpenCV detector 사용)
-    flir::CsvLoggerAru         csv_logger_aru("/tmp/rxtxtrack_aruco.csv");
     flir::EO_ArucoDetector_OpenCV aruco_detector(cv::aruco::DICT_4X4_50); // 필요시 딕셔너리 맞추기
     // 간단 전처리: BGR->GRAY 변환만 하는 프리프로세서
     struct SimpleArucoPreproc : flir::IArucoPreprocessor {
@@ -316,7 +312,7 @@ int main(int argc, char** argv)
                 cam_index,
                 cfg->eo_tx.frame.width, cfg->eo_tx.frame.height, cfg->eo_tx.fps,
                 mb_eo_tx,
-                [&](std::shared_ptr<flir::EOFrameHandle> h){ eo_aru.onFrameArrived(std::move(h)); }, // ★ 콜백
+                [&](std::shared_ptr<flir::EOFrameHandle> h){ eo_aru.onFrameArrived(std::move(h)); },
                 eo_wake
             );
         });

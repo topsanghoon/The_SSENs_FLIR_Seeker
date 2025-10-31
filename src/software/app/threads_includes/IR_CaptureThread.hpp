@@ -1,4 +1,3 @@
-//IR_Capture_
 #pragma once
 #include <atomic>
 #include <thread>
