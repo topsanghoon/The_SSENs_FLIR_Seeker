@@ -22,7 +22,6 @@ ControlThread::ControlThread(IEventBus& bus,
 {
     wake_.cv = &cv_;
     wake_.mu = &m_;
-    next_tick_tp_ = clock_t::now() + std::chrono::milliseconds(cfg_.period_ms);
 
     // ★ 초기 유도 단계 설정
     GuidanceState::phase().store(cfg_.guidance.default_phase);
@@ -33,6 +32,7 @@ ControlThread::ControlThread(IEventBus& bus,
 void ControlThread::start() {
     if (running_.exchange(true)) return;
 
+    // 이벤트 기반으로만 깨어난다 (Tracking/Aruco)
     bus_.subscribe(Topic::Tracking, &inbox_, &wake_);
     bus_.subscribe(Topic::Aruco,    &inbox_, &wake_);
 
@@ -57,45 +57,55 @@ void ControlThread::join() {
 }
 
 bool ControlThread::ready_to_wake() {
+    // 이벤트 버스에 새 이벤트?
     const bool has_evt = (inbox_.latest_seq() > fusion_.last_event_seq());
+    // SD 우편함에 새 명령?
     const bool has_sd  = (sd_mb_.latest_seq() > sd_seq_seen_);
-    const bool tick    = (clock_t::now() >= next_tick_tp_);
-    return !running_.load() ? true : (has_evt || has_sd || tick);
+
+    // 틱으로는 절대 깨우지 않음 — 완전 이벤트 드리븐
+    return !running_.load() ? true : (has_evt || has_sd);
 }
 
 void ControlThread::run() {
     while (running_.load()) {
         {
             std::unique_lock<std::mutex> lk(m_);
-            cv_.wait_until(lk, next_tick_tp_, [&]{ return ready_to_wake(); });
+            cv_.wait(lk, [&]{ return !running_.load() || ready_to_wake(); });
         }
         if (!running_.load()) break;
 
-        handle_self_destruct();
-        drain_events();
+        handle_self_destruct();          // SD가 오면 즉시 처리
+        had_new_sensing_evt_ = drain_events(); // 센싱 이벤트 드레인
 
         if (mode_ == Mode::RUN) {
-            tick_run_mode();
+            if (had_new_sensing_evt_) {
+                // 센싱이 들어왔을 때만 해결/송신
+                maybe_emit_control_if_target();
+            }
         } else {
+            // SHUTDOWN 진행
             step_shutdown_fsm();
         }
-
-        next_tick_tp_ = clock_t::now() + std::chrono::milliseconds(cfg_.period_ms);
     }
 }
 
-void ControlThread::drain_events() {
+bool ControlThread::drain_events() {
+    bool saw_sensing = false;
+
     while (auto ev = inbox_.exchange(nullptr)) {
         switch (ev->type) {
             case EventType::Track: {
                 const auto& x = std::get<TrackEvent>(ev->payload);
                 fusion_.update_with_track(x.box, x.score, x.ts, x.frame_seq);
+                saw_sensing = true;
                 CSV_LOG_SIMPLE("Ctrl", "IN_TRACK", x.frame_seq,
                                x.box.x, x.box.y, x.box.width, x.box.height, "");
             } break;
+
             case EventType::Aruco: {
                 const auto& x = std::get<ArucoEvent>(ev->payload);
                 fusion_.update_with_marker(x.id, x.box, x.ts);
+                saw_sensing = true;
                 CSV_LOG_SIMPLE("Ctrl", "IN_ARUCO", (uint64_t)x.id,
                                x.box.x, x.box.y, x.box.width, x.box.height, "");
 
@@ -104,10 +114,13 @@ void ControlThread::drain_events() {
                     on_aruco_for_transition(x.id, x.box, x.ts);
                 }
             } break;
+
             default: break;
         }
         fusion_.bump_last_event_seq();
     }
+
+    return saw_sensing;
 }
 
 void ControlThread::handle_self_destruct() {
@@ -116,28 +129,35 @@ void ControlThread::handle_self_destruct() {
             sd_seq_seen_ = sd->seq;
             mode_  = Mode::SHUTDOWN;
             phase_ = SdPhase::SD_QUIESCE;
-            t_phase_start_ = clock_t::now();
 
             CSV_LOG_SIMPLE("Ctrl", "SD_REQ", sd->seq, (double)sd->level, 0,0,0, "");
         }
     }
 }
 
-void ControlThread::tick_run_mode() {
+void ControlThread::maybe_emit_control_if_target() {
+    // 타깃 없으면 송신하지 않음
+    auto b = fusion_.last_box();
+    if (!has_target_box(b)) {
+        CSV_LOG_SIMPLE("Ctrl", "CTRL_SKIP_NO_TARGET", 0, 0,0,0,0, "");
+        return;
+    }
+
+    // 해결 → 송신
     CtrlCmd cmd = controller_.solve(fusion_);
     const uint64_t ts = flir::now_ns_steady();
 
-    // ★ 현재 유도 단계 포함하여 로그
+    // 현재 유도 단계 포함하여 로그
     const auto ph = GuidanceState::phase().load();
     CSV_LOG_SIMPLE("Ctrl", "CTRL_OUT",
                    (uint64_t) (ph == GuidancePhase::Midcourse ? 0 : 1),
                    (double)cmd.to_int(), 0,0,0, "");
 
-    // Meta_TxThread (PC)로도 나가게 Topic::Control에 게시 (현행 유지)
+    // Meta_TxThread로 게시
     Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ cmd.to_int(), ts } };
     bus_.push(ev, Topic::Control);
 
-    // UART로 비차단 송신 (현행 유지)
+    // UART 비차단 송신
     act_.write_nonblock(cmd);
 }
 
@@ -211,7 +231,7 @@ void ControlThread::on_aruco_for_transition(int id, const cv::Rect& box, uint64_
             CSV_LOG_SIMPLE("Ctrl", "PHASE_SWITCH",
                            1 /*Terminal*/, (double)dt_ms, 0,0,0, "");
 
-            // (선택) Meta_TxThread로 전환 통지 이벤트를 보내고 싶다면
+            // (선택) Meta_TxThread로 전환 통지
             const uint64_t ts = flir::now_ns_steady();
             Event ev_phase{ EventType::MetaCtrl, MetaCtrlEvent{ CtrlCmd::make_phase_switch_terminal().to_int(), ts } };
             bus_.push(ev_phase, Topic::Control);

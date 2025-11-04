@@ -1,4 +1,4 @@
-#include "event_bus_impl.hpp"
+#include "ipc/event_bus_impl.hpp"
 
 namespace flir {
 void EventBus::push(const Event& e, Topic topic) {

@@ -16,14 +16,14 @@ struct PathsConfig {
 
 struct IRTxConfig {
     VideoSize frame{160,120};
-    int       fps{30};
+    int       fps{15};
     int       bitDepth{16};           // gray16-le 등
     Endpoint  dst;                    // udp 목적지
 };
 
 struct EOTxConfig {
-    VideoSize frame{640,480};
-    int       fps{30};
+    VideoSize frame{320,240};
+    int       fps{15};
     int       jpeg_quality{30};
     Endpoint  dst;
 };

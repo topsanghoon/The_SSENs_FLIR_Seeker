@@ -33,4 +33,5 @@ target_link_libraries(seeker_demo
     ipc
     ${OpenCV_LIBS}
     ${GST_LIBRARIES}
+    Threads::Threads
 )

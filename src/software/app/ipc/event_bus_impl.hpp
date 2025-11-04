@@ -3,7 +3,7 @@
 #include <vector>
 #include <mutex>
 #include <algorithm>
-#include "event_bus.hpp"
+#include "ipc/event_bus.hpp"
 
 namespace flir {
 

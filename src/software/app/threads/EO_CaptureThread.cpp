@@ -1,93 +1,95 @@
-// threads_includes/EO_CaptureThread.cpp
 #include "threads_includes/EO_CaptureThread.hpp"
-#include <cstdio>
-#include <thread>
-using namespace std::chrono_literals;
+#include "components/includes/EO_Frame.hpp"
+#include "util/common_log.hpp"
+
+#include <opencv2/opencv.hpp>
+#include <chrono>
 
 namespace flir {
 
+namespace { constexpr const char* TAG = "EO_Cap"; }
+
+// ★ 핸들 파생형: frame + owner를 내부에 보관
+struct EOOwnedHandle final : public EOFrameHandle {
+    std::shared_ptr<std::vector<uint8_t>> owner; // 픽셀 버퍼
+    FrameBGR8 frame;                              // 프레임 메타 + data 포인터
+    EOOwnedHandle(const cv::Mat& bgr) {
+        const int w = bgr.cols, h = bgr.rows, step = static_cast<int>(bgr.step);
+        owner = std::make_shared<std::vector<uint8_t>>(step * h);
+        std::memcpy(owner->data(), bgr.data, owner->size());
+        frame.width = w; frame.height = h; frame.step = step; frame.data = owner->data();
+        p = &frame; // ★ 상위 타입의 포인터로 연결
+    }
+};
+
 EO_CaptureThread::EO_CaptureThread(std::string name,
-                                   SpscMailbox<std::shared_ptr<EOFrameHandle>>& out,
+                                   SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_tx,
+                                   SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_aru,
                                    std::unique_ptr<WakeHandle> wake,
-                                   AppConfigPtr app)
-: name_(std::move(name)), out_(out), wake_(std::move(wake)), app_(std::move(app)) {}
+                                   AppConfigPtr cfg)
+: name_(std::move(name)), out_tx_(out_tx), out_aru_(out_aru), wake_(std::move(wake)), cfg_(std::move(cfg)) {}
 
 EO_CaptureThread::~EO_CaptureThread() { stop(); join(); }
 
-bool EO_CaptureThread::init_cam() {
-    int dev = 0; // 필요 시 AppConfig에 device_id 추가
-    if (!cap_.open(dev, cv::CAP_V4L2)) return false;
+void EO_CaptureThread::start() { if (running_.exchange(true)) return; th_ = std::thread(&EO_CaptureThread::run_, this); }
+void EO_CaptureThread::stop()  { running_.store(false); }
+void EO_CaptureThread::join()  { if (th_.joinable()) th_.join(); }
 
-    // 원하는 설정 주입
-    cap_.set(cv::CAP_PROP_FRAME_WIDTH,  app_->eo_tx.frame.width);
-    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, app_->eo_tx.frame.height);
-    cap_.set(cv::CAP_PROP_FPS,          app_->eo_tx.fps);
+static std::shared_ptr<EOFrameHandle> make_bgr8_handle_(const cv::Mat& bgr) {
+    return std::static_pointer_cast<EOFrameHandle>(std::make_shared<EOOwnedHandle>(bgr));
+}
 
-    // 실제 협상 결과 확인. 불일치면 실패 처리(런타임 resize 금지)
-    int got_w = (int)cap_.get(cv::CAP_PROP_FRAME_WIDTH);
-    int got_h = (int)cap_.get(cv::CAP_PROP_FRAME_HEIGHT);
-    int got_f = (int)cap_.get(cv::CAP_PROP_FPS);
+void EO_CaptureThread::push_frame_(std::shared_ptr<EOFrameHandle> h) {
+    if (!h) return;
+    out_tx_.push(h);
+    out_aru_.push(std::move(h));
+    if (wake_) wake_->signal();
+}
 
-    if (got_w != app_->eo_tx.frame.width || got_h != app_->eo_tx.frame.height) {
-        std::fprintf(stderr,
-            "[EO_Cap][ERR] camera negotiated %dx%d@%dfps (wanted %dx%d@%dfps). Abort.\n",
-            got_w, got_h, got_f, app_->eo_tx.frame.width, app_->eo_tx.frame.height, app_->eo_tx.fps);
-        return false;
+void EO_CaptureThread::run_() {
+    using namespace std::chrono_literals;
+
+    const int W = cfg_->eo_tx.frame.width;
+    const int H = cfg_->eo_tx.frame.height;
+    const int FPS = std::max(1, cfg_->eo_tx.fps);
+
+    cv::VideoCapture cap(0);
+    if (!cap.isOpened()) {
+        LOGE(TAG, "failed to open camera(0). Falling back to color bars.");
+    } else {
+        cap.set(cv::CAP_PROP_FRAME_WIDTH,  W);
+        cap.set(cv::CAP_PROP_FRAME_HEIGHT, H);
+        cap.set(cv::CAP_PROP_FPS,          FPS);
     }
 
-    std::fprintf(stderr, "[EO_Cap] camera ready %dx%d@%dfps\n", got_w, got_h, got_f);
-    return true;
-}
+    const auto period = std::chrono::milliseconds(1000 / FPS);
+    while (running_.load(std::memory_order_relaxed)) {
+        auto t0 = std::chrono::steady_clock::now();
 
-void EO_CaptureThread::close_cam() {
-    if (cap_.isOpened()) cap_.release();
-}
-
-void EO_CaptureThread::start() {
-    if (running_.exchange(true)) return;
-    th_ = std::thread(&EO_CaptureThread::run, this);
-}
-
-void EO_CaptureThread::stop() { running_.store(false); }
-void EO_CaptureThread::join() { if (th_.joinable()) th_.join(); }
-
-std::shared_ptr<EOFrameHandle> EO_CaptureThread::make_handle(const cv::Mat& bgr) {
-    auto h = std::make_shared<EOMatHandle>();
-    h->keep = std::make_shared<cv::Mat>(bgr.clone());
-    h->owned.data   = h->keep->data;
-    h->owned.width  = h->keep->cols;
-    h->owned.height = h->keep->rows;
-    h->owned.step   = static_cast<int>(h->keep->step);
-    return h;
-}
-
-void EO_CaptureThread::run() {
-    if (!init_cam()) {
-        std::fprintf(stderr, "[EO_Cap] open/param fail\n");
-        running_.store(false);
-        return;
-    }
-
-    cv::Mat m;
-    uint64_t cnt = 0;
-
-    while (running_) {
-        // Producer 게이트: 중기 단계에서만 캡처/전달
-        if (!eo_enabled()) { std::this_thread::sleep_for(2ms); continue; }
-
-        if (!cap_.read(m) || m.empty()) continue;
-
-        auto h = make_handle(m);
-        out_.push(h);
-        if (wake_) wake_->signal();
-
-        // 최소 디버그(90프레임마다 1줄)
-        if ((++cnt % 90) == 0) {
-            std::fprintf(stderr, "[EO_Cap] frames=%llu\n", (unsigned long long)cnt);
+        cv::Mat frame_bgr;
+        if (cap.isOpened()) {
+            if (!cap.read(frame_bgr) || frame_bgr.empty()) continue;
+            if (frame_bgr.cols != W || frame_bgr.rows != H) cv::resize(frame_bgr, frame_bgr, {W,H});
+        } else {
+            frame_bgr = cv::Mat(H, W, CV_8UC3);
+            for (int y=0; y<H; ++y) {
+                auto* row = frame_bgr.ptr<cv::Vec3b>(y);
+                for (int x=0; x<W; ++x) {
+                    int band = (x * 7) / W;
+                    static const cv::Vec3b colors[7] = {{255,255,255},{255,255,0},{0,255,255},{0,255,0},{255,0,255},{255,0,0},{0,0,255}};
+                    row[x] = colors[band];
+                }
+            }
         }
-    }
 
-    close_cam();
+        auto h = make_bgr8_handle_(frame_bgr);
+        h->seq = ++seq_;
+        push_frame_(std::move(h));
+
+        auto dt = std::chrono::steady_clock::now() - t0;
+        if (dt < period) std::this_thread::sleep_for(period - dt);
+    }
+    LOGI(TAG, "run() exit");
 }
 
 } // namespace flir

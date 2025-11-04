@@ -28,7 +28,7 @@ public:
         if (s == ObsSource::ARUCO) {
             const int id = last_aruco_id_.load(std::memory_order_relaxed);
             CtrlCmd c{};
-            if (id == 1)      c.mode = 1;   // RIGHT
+            if (id == 1)      c.mode = 1;   // RIGHT>
             else if (id == 2) c.mode = 1;   // LEFT
             else if (id == 3) { src_.store(ObsSource::TRACKING, std::memory_order_relaxed); c.mode = 0; }
             else              c.mode = 1;
@@ -41,7 +41,7 @@ public:
         float err = cx - center;
 
         CtrlCmd c{};
-        if (err < -deadzone_)       c.mode = 1; // LEFT
+        if (err < -deadzone_)       c.mode = -1; // LEFT
         else if (err >  deadzone_)  c.mode = 1; // RIGHT
         else                        c.mode = 0; // CENTER
         c.p1 = err; c.p2 = 0.f; c.p3 = 0.f;

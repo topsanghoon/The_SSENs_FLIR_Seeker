@@ -1,7 +1,7 @@
 #pragma once
-#include "ipc_types.hpp"
-#include "mailbox.hpp"
-#include "wake.hpp"
+#include "ipc/ipc_types.hpp"
+#include "ipc/mailbox.hpp"
+#include "ipc/wake.hpp"
 
 namespace flir {
 

@@ -1,34 +1,24 @@
-// threads_includes/EO_CaptureThread.hpp
 #pragma once
 #include <atomic>
-#include <thread>
 #include <memory>
-#include <chrono>
-#include <opencv2/core.hpp>
-#include <opencv2/videoio.hpp>
+#include <string>
+#include <thread>
+#include <vector>
 
-#include "components/includes/EO_Frame.hpp"
 #include "ipc/mailbox.hpp"
 #include "ipc/wake.hpp"
-#include "main_config.hpp"   // AppConfigPtr
-#include "phase_gate.hpp"    // eo_enabled()
+#include "main_config.hpp"           // AppConfig/AppConfigPtr
+#include "components/includes/EO_Frame.hpp"
 
 namespace flir {
-
-struct EOMatHandle : EOFrameHandle {
-    std::shared_ptr<cv::Mat> keep;
-    FrameBGR8 owned{};
-    EOMatHandle(){ p = &owned; }
-    void retain() override {}
-    void release() override { keep.reset(); }
-};
 
 class EO_CaptureThread {
 public:
     EO_CaptureThread(std::string name,
-                     SpscMailbox<std::shared_ptr<EOFrameHandle>>& output_mb,
+                     SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_tx,
+                     SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_aru,
                      std::unique_ptr<WakeHandle> wake,
-                     AppConfigPtr app);
+                     AppConfigPtr cfg);
     ~EO_CaptureThread();
 
     void start();
@@ -36,19 +26,19 @@ public:
     void join();
 
 private:
-    std::string name_;
-    SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_;
-    std::unique_ptr<WakeHandle> wake_;
-    AppConfigPtr app_;
+    void run_();
+    void push_frame_(std::shared_ptr<EOFrameHandle> h);
 
+    std::string name_;
     std::thread th_;
     std::atomic<bool> running_{false};
-    cv::VideoCapture cap_;
 
-    void run();
-    bool init_cam();
-    void close_cam();
-    std::shared_ptr<EOFrameHandle> make_handle(const cv::Mat& bgr);
+    SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_tx_;
+    SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_aru_;
+    std::unique_ptr<WakeHandle> wake_;
+    AppConfigPtr cfg_;
+
+    uint64_t seq_{0};
 };
 
 } // namespace flir

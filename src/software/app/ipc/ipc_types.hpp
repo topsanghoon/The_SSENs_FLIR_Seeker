@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <variant>
+#include <array>
 #include <opencv2/core.hpp>
 
 namespace flir {

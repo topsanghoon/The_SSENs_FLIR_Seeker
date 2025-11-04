@@ -22,7 +22,7 @@ public:
     void push(const T& item) {  // 복사 전달일 경우
         emplace_impl(item);
     }
-    void push(T&& item) {       // 기존에 것은 버리고 새로운 것에 전달을 하는 것. 그래서 move 사용
+    void push(T&& item) {       // 필요시 가장 오래된 항목 drop
         emplace_impl(std::move(item));
     }
 
