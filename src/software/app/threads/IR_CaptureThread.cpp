@@ -1,4 +1,5 @@
 #include "threads_includes/IR_CaptureThread.hpp"
+
 #include <iostream>
 #include <chrono>
 #include <cstring>
@@ -185,44 +186,60 @@ void IR_CaptureThread::cleanup_spi() {
 	}
 }
 
+void IR_CaptureThread::push_frame_routed_(const std::shared_ptr<IRFrameHandle>& h) {
+    // 1) TX로는 항상 보냄
+    output_mailbox_.push(h);
+    if (wake_handle_) wake_handle_->signal();
+
+    // 2) 단계 기반: Terminal에서 Tracking ON (원하면 Midcourse도 ON 가능)
+    auto phase = GuidanceState::phase().load(std::memory_order_relaxed);
+    const bool route_to_track = (phase == GuidancePhase::Terminal);
+    if (!route_to_track) return;
+
+    if (track_sink_) {
+        // ★ 테스트 방식: 소비자 onFrameArrived로 직접 전달
+        track_sink_(h);
+        return;
+    }
+    if (output_trk_) {
+        // ★ 과거 방식: 트랙용 메일박스에 직접 push
+        output_trk_->push(h);
+    }
+}
+
 void IR_CaptureThread::run() {
-	std::cout << "[" << name_ << "] IR capture thread started" << std::endl;
-    
-	auto target_period = std::chrono::microseconds(1000000 / config_.fps);
-	auto next_frame_time = std::chrono::steady_clock::now();
-    
-	while (running_.load()) {
-		auto frame_start = std::chrono::steady_clock::now();
-        
-		try {
-			if (capture_vospi_frame()) {
-				auto frame = create_frame_handle();
-				if (frame) {
-					output_mailbox_.push(frame);
-					frame_count_.fetch_add(1);
-                    
-					// Signal TX thread that new frame is available
-					if (wake_handle_) {
-						wake_handle_->signal();
-					}
-				}
-			} else {
-				error_count_.fetch_add(1);
-			}
-		} catch (const std::exception& e) {
-			std::cerr << "[" << name_ << "] Capture error: " << e.what() << std::endl;
-			error_count_.fetch_add(1);
-		}
-        
-		// Frame rate control
-		next_frame_time += target_period;
-		auto sleep_until = std::max(next_frame_time, frame_start + std::chrono::microseconds(1000));
-		std::this_thread::sleep_until(sleep_until);
-	}
-    
-	std::cout << "[" << name_ << "] IR capture thread stopped. Frames: " 
-			  << frame_count_.load() << ", Errors: " << error_count_.load()
-			  << ", Discards: " << discard_count_.load() << std::endl;
+    std::cout << "[" << name_ << "] IR capture thread started" << std::endl;
+
+    auto target_period = std::chrono::microseconds(1000000 / config_.fps);
+    auto next_frame_time = std::chrono::steady_clock::now();
+
+    while (running_.load()) {
+        auto frame_start = std::chrono::steady_clock::now();
+
+        try {
+            if (capture_vospi_frame()) {
+                auto frame = create_frame_handle();
+                if (frame) {
+                    // ★ 변경 포인트: 기존 "output_mailbox_.push(frame);" → 단계 라우팅 호출
+                    push_frame_routed_(frame);
+                    frame_count_.fetch_add(1);
+                }
+            } else {
+                error_count_.fetch_add(1);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[" << name_ << "] Capture error: " << e.what() << std::endl;
+            error_count_.fetch_add(1);
+        }
+
+        next_frame_time += target_period;
+        auto sleep_until = std::max(next_frame_time, frame_start + std::chrono::microseconds(1000));
+        std::this_thread::sleep_until(sleep_until);
+    }
+
+    std::cout << "[" << name_ << "] IR capture thread stopped. Frames: "
+              << frame_count_.load() << ", Errors: " << error_count_.load()
+              << ", Discards: " << discard_count_.load() << std::endl;
 }
 
 bool IR_CaptureThread::capture_vospi_frame() {

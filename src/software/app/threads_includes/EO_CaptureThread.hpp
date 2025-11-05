@@ -4,6 +4,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <functional>
 
 #include "ipc/mailbox.hpp"
 #include "ipc/wake.hpp"
@@ -25,6 +26,10 @@ public:
     void stop();
     void join();
 
+    void set_aru_sink(std::function<void(std::shared_ptr<EOFrameHandle>)> sink) {
+        aruco_sink_ = std::move(sink);
+    }
+
 private:
     void run_();
     void push_frame_(std::shared_ptr<EOFrameHandle> h);
@@ -32,6 +37,7 @@ private:
     std::string name_;
     std::thread th_;
     std::atomic<bool> running_{false};
+    std::function<void(std::shared_ptr<EOFrameHandle>)> aruco_sink_;
 
     SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_tx_;
     SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_aru_;

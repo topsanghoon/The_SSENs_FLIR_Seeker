@@ -5,11 +5,13 @@
 #include <memory>
 #include <vector>
 #include <chrono>
+#include <functional>
 
 #include <opencv2/core.hpp>
 #include "components/includes/IR_Frame.hpp"
 #include "ipc/mailbox.hpp"
 #include "ipc/wake.hpp"
+#include "guidance_mode.hpp"
 
 namespace flir {
 
@@ -60,68 +62,70 @@ public:
         std::unique_ptr<WakeHandle> wake_handle,
         const IRCaptureConfig& config = IRCaptureConfig{}
     );
-    
     ~IR_CaptureThread();
-    
+
     void start();
     void stop();
     void join();
-    
-    // Statistics
+
+    // ★ 추가: EO처럼 트래킹 큐도 받도록 "사후 주입" (메인 최소 변경)
+    void set_track_sink(std::function<void(std::shared_ptr<IRFrameHandle>)> sink) noexcept {
+        track_sink_ = std::move(sink);
+    }
+    // (메일박스로 보내고 싶을 때를 대비해 set_track_mailbox도 유지 가능)
+    void set_track_mailbox(SpscMailbox<std::shared_ptr<IRFrameHandle>>* mb) noexcept {
+        output_trk_ = mb;
+    }
+
+    // Statistics (기존)
     uint64_t get_frame_count() const { return frame_count_.load(); }
     uint64_t get_error_count() const { return error_count_.load(); }
     uint64_t get_discard_count() const { return discard_count_.load(); }
-    
-    // Camera reset
+
     void reset_camera();
-    
+
 private:
     std::string name_;
-    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox_;
+    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox_;          // TX용 (기존)
+    SpscMailbox<std::shared_ptr<IRFrameHandle>>* output_trk_{nullptr};     // ★ 추가: 트랙용(옵션)
     std::unique_ptr<WakeHandle> wake_handle_;
     IRCaptureConfig config_;
-    
-    // Thread management
+
     std::thread th_;
     std::atomic<bool> running_{false};
-    
-    // SPI interface
+
     int spi_fd_;
-    
-    // VoSPI buffers
-    std::vector<uint8_t> segment_buffer_;      // Buffer for segment data
-    std::vector<uint16_t> frame_buffer_;       // Buffer for reconstructed frame
-    
-    // Statistics
+
+    std::vector<uint8_t>  segment_buffer_;
+    std::vector<uint16_t> frame_buffer_;
+
     std::atomic<uint64_t> frame_count_{0};
     std::atomic<uint64_t> error_count_{0};
     std::atomic<uint64_t> discard_count_{0};
     std::atomic<uint32_t> sequence_{0};
-    
-    // Watchdog thread
+
     std::thread watchdog_thread_;
     std::atomic<bool> watchdog_running_{false};
     void watchdog_run();
-    
-    // Internal methods
+
     void run();
     bool initialize_spi();
     void cleanup_spi();
-    
-    // VoSPI protocol handling
+
     bool capture_vospi_frame();
     bool capture_segment(int segment_id);
     bool read_vospi_packet(uint8_t* packet_buffer);
     void reconstruct_frame();
-    
-    // VoSPI packet analysis
+
     bool is_sync_packet(const uint8_t* packet);
     bool is_discard_packet(const uint8_t* packet);
-    int get_packet_line_number(const uint8_t* packet);
-    
-    // Frame creation
+    int  get_packet_line_number(const uint8_t* packet);
+
     std::shared_ptr<IRFrameHandle> create_frame_handle();
     uint64_t get_timestamp_ns();
+    std::function<void(std::shared_ptr<IRFrameHandle>)> track_sink_;
+    // ★ 추가: 단계 기반 라우팅 (EO의 push_frame_과 유사 컨셉)
+    void push_frame_routed_(const std::shared_ptr<IRFrameHandle>& h);
 };
 
 } // namespace flir

@@ -1,6 +1,7 @@
 #include "threads_includes/EO_CaptureThread.hpp"
 #include "components/includes/EO_Frame.hpp"
 #include "util/common_log.hpp"
+#include "guidance_mode.hpp"
 
 #include <opencv2/opencv.hpp>
 #include <chrono>
@@ -41,9 +42,26 @@ static std::shared_ptr<EOFrameHandle> make_bgr8_handle_(const cv::Mat& bgr) {
 
 void EO_CaptureThread::push_frame_(std::shared_ptr<EOFrameHandle> h) {
     if (!h) return;
+
+    // 1) TX로는 그대로
     out_tx_.push(h);
-    out_aru_.push(std::move(h));
     if (wake_) wake_->signal();
+
+    // 2) 단계 기반 라우팅: Midcourse에선 ArUco로
+    auto phase = GuidanceState::phase().load(std::memory_order_relaxed);
+
+    if (phase == GuidancePhase::Midcourse) {
+        if (aruco_sink_) {
+            // ★ 테스트 방식: 소비자 onFrameArrived로 직접 전달(내부에서 push+notify 처리)
+            aruco_sink_(h);
+        } else {
+            // ★ 이전 방식 유지: 메일박스 직접 push (notify는 소비자 내부 정책에 따름)
+            out_aru_.push(std::move(h));
+        }
+    } else {
+        // Terminal에서도 ArUco 유지하려면 위 if를 제거하고 항상 전달
+        // if (aruco_sink_) aruco_sink_(h); else out_aru_.push(std::move(h));
+    }
 }
 
 void EO_CaptureThread::run_() {
@@ -65,7 +83,7 @@ void EO_CaptureThread::run_() {
     const auto period = std::chrono::milliseconds(1000 / FPS);
     while (running_.load(std::memory_order_relaxed)) {
         auto t0 = std::chrono::steady_clock::now();
-
+        
         cv::Mat frame_bgr;
         if (cap.isOpened()) {
             if (!cap.read(frame_bgr) || frame_bgr.empty()) continue;

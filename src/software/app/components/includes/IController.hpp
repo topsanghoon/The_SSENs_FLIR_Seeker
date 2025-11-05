@@ -44,12 +44,12 @@ public:
         if (err < -deadzone_)       c.mode = -1; // LEFT
         else if (err >  deadzone_)  c.mode = 1; // RIGHT
         else                        c.mode = 0; // CENTER
-        c.p1 = err; c.p2 = 0.f; c.p3 = 0.f;
+        c.p1 = err/2; c.p2 = 0.f; c.p3 = 0.f;
         return c;
     }
 
 private:
-    int   frame_w_{160};
+    int   frame_w_{80};
     float deadzone_{4.f};
     std::atomic<ObsSource> src_{ObsSource::TRACKING};
     std::atomic<int>       last_aruco_id_{0};

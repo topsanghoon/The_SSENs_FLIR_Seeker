@@ -13,6 +13,7 @@
 #include <optional>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 namespace flir {
 
@@ -76,7 +77,7 @@ void EO_ArUcoThread::run() {
 
     while (running_.load()) {
         if (!flir::eo_enabled()) { std::unique_lock<std::mutex> lk(g_m_eo); g_cv_eo.wait_for(lk, std::chrono::milliseconds(5)); continue; }
-
+        
         wait_until_ready();
         if (!running_.load()) break;
         if (!eo_mb_.has_new(frame_seq_seen_)) continue;

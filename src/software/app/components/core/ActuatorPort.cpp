@@ -61,7 +61,7 @@ void UART_ActuatorPort::write_nonblock(const CtrlCmd& cmd) {
     if (quiesce_.load() || fd_ < 0) return;
 
     // 1바이트 전송 로직 (Arduino의 Serial1.read()와 호환)
-    int8_t motor_val = static_cast<int8_t>(cmd.p1 * cmd.mode);
+    int8_t motor_val = static_cast<int8_t>(cmd.p1);
     
     ssize_t bytes_written = write(fd_, &motor_val, sizeof(motor_val));
 

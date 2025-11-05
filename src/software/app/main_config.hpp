@@ -49,7 +49,7 @@ struct GuidanceConfig {
     int  min_bbox_w{160};
     int  min_bbox_h{160};
     int  min_big_frames{5};      // “충분히 큼” 연속 프레임 수
-    int  lost_timeout_ms{300};   // 큰 상태 이후 미검출 지속 시간
+    int  hold_big_ms{300};   // 큰 상태 이후 미검출 지속 시간
     // (선택) 프레임 비율 기준: max(bw/W,bh/H) >= min_bbox_frac
     float min_bbox_frac{0.0f};   // 0이면 비활성
 };

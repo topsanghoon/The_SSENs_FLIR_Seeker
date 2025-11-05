@@ -82,6 +82,7 @@ private:
     int                 big_cnt_ = 0;
     bool                big_reached_ = false;
     clock_t::time_point last_seen_tp_{};
+    clock_t::time_point big_reached_tp_{};
 
     void run();
 

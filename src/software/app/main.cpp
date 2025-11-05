@@ -87,10 +87,10 @@ int main(int, char**) {
 
     // 유도 로직 기본 파라미터
     app->guidance.terminal_marker_id = 3;
-    app->guidance.min_bbox_w = 160;
-    app->guidance.min_bbox_h = 160;
+    app->guidance.min_bbox_w = 80;
+    app->guidance.min_bbox_h = 80;
     app->guidance.min_big_frames = 5;
-    app->guidance.lost_timeout_ms = 300;
+    app->guidance.hold_big_ms = 300;
     app->guidance.min_bbox_frac = 0.0f;
 
 
@@ -152,10 +152,19 @@ int main(int, char**) {
     std::thread ir_splitter([&](){
         while (splitter_run.load()) {
             if (auto hopt = mb_ir_cap.exchange(nullptr)) {
-                auto frame = *hopt;       // 공유 포인터 복제 → 두 소비자에게 동일 프레임 전달
+                auto frame = *hopt;
+
+                // TX는 항상 전송
                 mb_ir_tx.push(frame);
-                mb_ir_trk.push(frame);
-                ir_wake_for_split->signal(); // Tx 깨우기
+
+                // ★ 단계 기반 라우팅: Terminal에서만 Tracking으로 전송
+                auto phase = GuidanceState::phase().load(std::memory_order_relaxed);
+                if (phase == GuidancePhase::Terminal) {
+                    mb_ir_trk.push(frame);
+                }
+
+                // TX 깨우기 (필요시 Tracking도 깰 웨이크가 있으면 같이 호출 가능)
+                ir_wake_for_split->signal();
             } else {
                 std::this_thread::sleep_for(1ms);
             }
@@ -202,6 +211,18 @@ int main(int, char**) {
     Meta_TxThread meta_tx(bus, app);                // 상태/이벤트 메타 전송
     Net_RxThread  net_rx("Net_Rx", app, mb_click);  // 지상국 입력 수신
     // [MOVE-OUT] 메시지 포맷/주기/리트라이 등은 설정으로
+
+
+    // EO
+    eo_cap.set_aru_sink([&](std::shared_ptr<flir::EOFrameHandle> h){
+        eo_aru.onFrameArrived(std::move(h));
+    });
+
+    // IR
+    ir_cap.set_track_sink([&](std::shared_ptr<flir::IRFrameHandle> h){
+        ir_track.onFrameArrived(std::move(h));
+    });
+
 
     // ====== Start ======
     // [NOTE] main은 "조립 및 시작/정지"만 담당 → 적절
