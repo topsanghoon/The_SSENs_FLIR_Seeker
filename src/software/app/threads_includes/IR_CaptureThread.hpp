@@ -10,98 +10,118 @@
 #include "components/includes/IR_Frame.hpp"
 #include "ipc/mailbox.hpp"
 #include "ipc/wake.hpp"
-#include "main_config.hpp"   // AppConfig / AppConfigPtr
 
 namespace flir {
 
-// ===== VoSPI constants (Lepton 2.5) =====
+// VoSPI (Video over SPI) protocol constants for FLIR Lepton 2.5
 namespace vospi {
-    constexpr int PACKET_SIZE         = 164;   // 4B header + 160B payload
-    constexpr int PAYLOAD_SIZE        = 160;   // 80 px * 2 B
-    constexpr int PIXELS_PER_LINE     = 80;
-    constexpr int LINES_PER_SEGMENT   = 60;
-    constexpr int PACKETS_PER_SEGMENT = 60;    // 1 packet per line
-    constexpr int SEGMENTS_PER_FRAME  = 1;     // Lepton 2.5 = 1
-    constexpr int FRAME_WIDTH         = 80;
-    constexpr int FRAME_HEIGHT        = 60;
+    constexpr int PACKET_SIZE = 164;           // Total packet size in bytes
+    constexpr int PAYLOAD_SIZE = 160;          // Payload size per packet (80 pixels × 2 bytes)
+    constexpr int PIXELS_PER_LINE = 80;        // Pixels per line in raw segment
+    constexpr int LINES_PER_SEGMENT = 60;      // Lines per segment
+    constexpr int PACKETS_PER_SEGMENT = 60;    // Packets per segment (1 packet per line)
+    constexpr int SEGMENTS_PER_FRAME = 1;      // Total segments per frame (Lepton 2.5 uses 1 segment)
+    constexpr int FRAME_WIDTH = 80;            // Final frame width (Lepton 2.5)
+    constexpr int FRAME_HEIGHT = 60;           // Final frame height (Lepton 2.5)
 }
 
-// cv::Mat을 보유하는 IR 핸들 (소유권 보장)
+struct IRCaptureConfig {
+    std::string spi_device = "/dev/spidev1.0";  // SPI device path
+    uint32_t spi_speed = 12500000;              // SPI speed in Hz (12.5MHz for stability)
+    int fps = 9;                                // Target frame rate (Lepton 3.0 max ~9 fps)
+    // Microsecond delay after each SPI transfer. 
+    // inter-transfer delay to let the Lepton's VoSPI interface stabilize
+    // between chip-select toggles. 
+    uint32_t spi_delay_usecs = 50;              // Default 50 µs
+};
+
+// MatHandle implementation for IR frames
 struct IRMatHandle : IRFrameHandle {
     std::shared_ptr<cv::Mat> keep;
     IRFrame16 owned{};
     IRMatHandle() { p = &owned; }
+    
     ~IRMatHandle() override = default;
-    void retain() override {}
-    void release() override {}
+    
+    void retain() override {
+        // shared_ptr handles reference counting
+    }
+    
+    void release() override {
+        // shared_ptr handles reference counting  
+    }
 };
 
 class IR_CaptureThread {
 public:
-    // 팬아웃 내장: 캡처 → [out_tx, out_trk] 두 큐로 복제
     IR_CaptureThread(
         std::string name,
-        SpscMailbox<std::shared_ptr<IRFrameHandle>>& out_tx,
-        SpscMailbox<std::shared_ptr<IRFrameHandle>>& out_trk,
-        AppConfigPtr cfg
+        SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox,
+        std::unique_ptr<WakeHandle> wake_handle,
+        const IRCaptureConfig& config = IRCaptureConfig{}
     );
+    
     ~IR_CaptureThread();
-
+    
     void start();
     void stop();
     void join();
-
-    // Stats
-    uint64_t frames()   const { return frame_count_.load(); }
-    uint64_t errors()   const { return error_count_.load(); }
-    uint64_t discards() const { return discard_count_.load(); }
-
-    // I2C를 통한 Lepton 재부팅(필요시)
+    
+    // Statistics
+    uint64_t get_frame_count() const { return frame_count_.load(); }
+    uint64_t get_error_count() const { return error_count_.load(); }
+    uint64_t get_discard_count() const { return discard_count_.load(); }
+    
+    // Camera reset
     void reset_camera();
-
-private:
-    // threads
-    void run();
-
-    // SPI
-    bool initialize_spi();
-    void cleanup_spi();
-
-    // VoSPI
-    bool capture_vospi_frame();
-    bool capture_segment(int seg_id);
-    bool read_vospi_packet(uint8_t* packet_buffer);
-    void reconstruct_frame();
-
-    // Packet helpers
-    bool is_discard_packet(const uint8_t* packet);
-    int  get_packet_line_number(const uint8_t* packet);
-
-    // Handle
-    std::shared_ptr<IRFrameHandle> create_frame_handle();
-    uint64_t now_ns();
-
+    
 private:
     std::string name_;
-    SpscMailbox<std::shared_ptr<IRFrameHandle>>& out_tx_;
-    SpscMailbox<std::shared_ptr<IRFrameHandle>>& out_trk_;
-    AppConfigPtr cfg_;
-
+    SpscMailbox<std::shared_ptr<IRFrameHandle>>& output_mailbox_;
+    std::unique_ptr<WakeHandle> wake_handle_;
+    IRCaptureConfig config_;
+    
+    // Thread management
     std::thread th_;
     std::atomic<bool> running_{false};
-
-    // SPI fd
-    int spi_fd_{-1};
-
-    // Buffers
-    std::vector<uint8_t>  segment_buffer_; // 60 * 160 bytes
-    std::vector<uint16_t> frame_buffer_;   // 80 * 60 uint16
-
-    // stats
+    
+    // SPI interface
+    int spi_fd_;
+    
+    // VoSPI buffers
+    std::vector<uint8_t> segment_buffer_;      // Buffer for segment data
+    std::vector<uint16_t> frame_buffer_;       // Buffer for reconstructed frame
+    
+    // Statistics
     std::atomic<uint64_t> frame_count_{0};
     std::atomic<uint64_t> error_count_{0};
     std::atomic<uint64_t> discard_count_{0};
-    std::atomic<uint32_t> seq_{0};
+    std::atomic<uint32_t> sequence_{0};
+    
+    // Watchdog thread
+    std::thread watchdog_thread_;
+    std::atomic<bool> watchdog_running_{false};
+    void watchdog_run();
+    
+    // Internal methods
+    void run();
+    bool initialize_spi();
+    void cleanup_spi();
+    
+    // VoSPI protocol handling
+    bool capture_vospi_frame();
+    bool capture_segment(int segment_id);
+    bool read_vospi_packet(uint8_t* packet_buffer);
+    void reconstruct_frame();
+    
+    // VoSPI packet analysis
+    bool is_sync_packet(const uint8_t* packet);
+    bool is_discard_packet(const uint8_t* packet);
+    int get_packet_line_number(const uint8_t* packet);
+    
+    // Frame creation
+    std::shared_ptr<IRFrameHandle> create_frame_handle();
+    uint64_t get_timestamp_ns();
 };
 
 } // namespace flir

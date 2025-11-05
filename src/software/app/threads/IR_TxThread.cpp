@@ -1,207 +1,197 @@
-// IR_TxThread.cpp  (CSV unified, no per-IPC CSV logs)
 #include "threads_includes/IR_TxThread.hpp"
-
-#include <sstream>
+#include "ipc/wake_condvar.hpp" 
 #include <chrono>
-#include <cstring>
+#include <sstream>
 #include <stdexcept>
+#include <iostream>
+#include <cstring>
 
-#include "util/common_log.hpp"   // LOGI/LOGW/...
-#include "util/time_util.hpp"    // ScopedTimerMs
-#include "util/csv_sink.hpp"     // CSV_LOG_SIMPLE
-#include "util/telemetry.hpp"
+#include <gst/gst.h>
+#include <gst/app/gstappsrc.h>
 
 namespace flir {
 
-namespace {
-constexpr const char* TAG = "IR_Tx";
-std::once_flag g_gst_once_ir;
-
-inline void ensure_gst_init_once() {
-    std::call_once(g_gst_once_ir, []{
-        int argc = 0; char** argv = nullptr;
-        gst_init(&argc, &argv);
-    });
-}
-
-// bitDepth → GStreamer caps용 포맷 문자열, 바이트/픽셀 반환
-inline std::pair<const char*, int> bitdepth_to_caps(int bitDepth) {
-    if (bitDepth <= 8)  return { "GRAY8",     1 };
-    return { "GRAY16_LE", 2 }; // 14bit도 16LE로 실어보냄
-}
-} // namespace
-
-IR_TxThread::IR_TxThread(std::string name,
-                         AppConfigPtr cfg,
-                         SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb,
-                         WakeHandle& wake)
-    : name_(std::move(name)), cfg_(std::move(cfg)), mb_(mb), wake_(wake)
+IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb, const GstConfig& gst_config)
+    : name_(std::move(name)),
+      mb_(mb),
+      gst_config_(gst_config)
 {}
 
+// Default constructor using default GstConfig values
+IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb)
+    : name_(std::move(name)),
+      mb_(mb),
+      gst_config_(GstConfig{}) // Use default values
+{}
+
+// 소멸자: GStreamer 리소스 정리
 IR_TxThread::~IR_TxThread() {
     stop();
+    
+    // Send EOS before joining thread
+    if (pipeline_ && appsrc_) {
+        gst_app_src_end_of_stream((GstAppSrc*)appsrc_);
+    }
+    
     join();
-    teardown_pipeline();
-}
-
-void IR_TxThread::start() {
-    if (running_.exchange(true)) return;
-
-    ensure_gst_init_once();
-    if (!init_pipeline()) {
-        running_.store(false);
-        throw std::runtime_error("IR pipeline init failed");
-    }
-    th_ = std::thread(&IR_TxThread::run, this);
-    LOGI(TAG, "thread started");
-    CSV_LOG_SIMPLE("IR.Tx", "THREAD_START", 0, 0,0,0,0, "");
-}
-
-void IR_TxThread::stop() {
-    if (!running_.load()) return;
-    running_.store(false);
-    // 필요 시 wake_.signal(); 추가 가능
-}
-
-void IR_TxThread::join() {
-    if (th_.joinable()) {
-        th_.join();
-        LOGI(TAG, "thread joined");
-        CSV_LOG_SIMPLE("IR.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
+    
+    if (pipeline_) {
+        // Wait for EOS to propagate
+        GstBus* bus = gst_element_get_bus(pipeline_);
+        if (bus) {
+            gst_bus_timed_pop_filtered(bus, 500 * GST_MSECOND, 
+                                       (GstMessageType)(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+            gst_object_unref(bus);
+        }
+        
+        // Proper shutdown sequence
+        gst_element_set_state(pipeline_, GST_STATE_NULL);
+        
+        // Wait for state change to complete
+        GstStateChangeReturn ret = gst_element_get_state(pipeline_, nullptr, nullptr, GST_SECOND);
+        if (ret == GST_STATE_CHANGE_FAILURE) {
+            std::cerr << "[" << name_ << "] WARNING: Failed to set pipeline to NULL state" << std::endl;
+        }
+        
+        gst_object_unref(pipeline_);
+        pipeline_ = nullptr;
+        appsrc_ = nullptr;
     }
 }
 
-bool IR_TxThread::init_pipeline() {
-    teardown_pipeline(); // 방어적
+// GStreamer 파이프라인 초기화 
+bool IR_TxThread::initialize_gstreamer() {
+    static bool gst_initialized = false;
+    if (!gst_initialized) {
+        gst_init(nullptr, nullptr);
+        gst_initialized = true;
+    }
 
-    const auto& c = cfg_->ir_tx;
-    const auto [fmt_caps, bpp] = bitdepth_to_caps(c.bitDepth);
+         // Send raw 16-bit little-endian grayscale frames directly over UDP.
+         std::stringstream ss;
+         ss << "appsrc name=ir_appsrc is-live=true do-timestamp=true block=true format=TIME "
+             << "caps=video/x-raw,format=GRAY16_LE,width=" << gst_config_.width
+             << ",height=" << gst_config_.height
+             << ",framerate=" << gst_config_.fps << "/1 ! "
+             << "udpsink host=" << gst_config_.pc_ip
+             << " port=" << gst_config_.port
+             << " sync=false async=false";
+       
+    std::string pipeline_str = ss.str();
+    
+    std::cout << "[" << name_ << "] GStreamer pipeline: " << pipeline_str << std::endl;
 
-    // appsrc(raw gray) → udpsink
-    std::ostringstream ss;
-    ss << "appsrc name=ir_appsrc is-live=true do-timestamp=true block=false "
-       << "! video/x-raw,format=" << fmt_caps
-       << ",width=" << c.frame.width
-       << ",height=" << c.frame.height
-       << ",framerate=" << c.fps << "/1 "
-       << "! queue max-size-buffers=8 max-size-time=0 leaky=downstream "
-       << "! udpsink host=" << c.dst.ip
-       << " port=" << c.dst.port;
-
-    const auto pipeline_str = ss.str();
-    LOGI(TAG, "IR pipeline: %s", pipeline_str.c_str());
-
-    GError* err = nullptr;
-    pipeline_ = gst_parse_launch(pipeline_str.c_str(), &err);
-    if (!pipeline_) {
-        if (err) { LOGE(TAG, "gst_parse_launch: %s", err->message); g_error_free(err); }
+    GError* error = nullptr;
+    pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
+    if (error || !pipeline_) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to create pipeline";
+        if (error) {
+            std::cerr << ": " << error->message;
+            g_error_free(error);
+        }
+        std::cerr << std::endl;
         return false;
     }
 
-    appsrc_ = GST_APP_SRC(gst_bin_get_by_name(GST_BIN(pipeline_), "ir_appsrc"));
+    appsrc_ = (GstAppSrc*)gst_bin_get_by_name(GST_BIN(pipeline_), "ir_appsrc");
     if (!appsrc_) {
-        LOGE(TAG, "appsrc not found");
-        gst_object_unref(pipeline_); pipeline_ = nullptr;
+        std::cerr << "[" << name_ << "] ERROR: Failed to get appsrc element" << std::endl;
         return false;
     }
-
-    g_object_set(G_OBJECT(appsrc_),
-                 "format",     GST_FORMAT_TIME,
-                 "is-live",    TRUE,
-                 "block",      FALSE,
-                 nullptr);
-
-    const auto st = gst_element_set_state(pipeline_, GST_STATE_PLAYING);
-    if (st == GST_STATE_CHANGE_FAILURE) {
-        LOGE(TAG, "set_state(PLAYING) failed");
-        gst_object_unref(appsrc_); appsrc_ = nullptr;
-        gst_object_unref(pipeline_); pipeline_ = nullptr;
+    
+    g_object_set(G_OBJECT(appsrc_), "block", TRUE, nullptr);
+    
+    auto state_ret = gst_element_set_state(pipeline_, GST_STATE_PLAYING);
+    if (state_ret == GST_STATE_CHANGE_FAILURE) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to set pipeline to PLAYING state" << std::endl;
         return false;
     }
-
-    frame_seq_seen_ = mb_.latest_seq();
-    LOGI(TAG, "IR_TxThread init done (dst=%s:%u %dx%d@%dfps bpp=%d)",
-         c.dst.ip.c_str(), c.dst.port, c.frame.width, c.frame.height, c.fps, bpp);
+    
+    std::cout << "[" << name_ << "] GStreamer pipeline started successfully" << std::endl;
     return true;
 }
 
-void IR_TxThread::teardown_pipeline() {
-    if (pipeline_) {
-        gst_element_send_event(pipeline_, gst_event_new_eos());
-        gst_element_set_state(pipeline_, GST_STATE_NULL);
+// 스레드 시작
+void IR_TxThread::start() {
+    if (th_.joinable()) return;
+    if (!initialize_gstreamer()) {
+        throw std::runtime_error("IR_TxThread failed to initialize GStreamer.");
     }
-    if (appsrc_) { gst_object_unref(appsrc_); appsrc_ = nullptr; }
-    if (pipeline_) { gst_object_unref(pipeline_); pipeline_ = nullptr; }
+    running_.store(true);
+    th_ = std::thread(&IR_TxThread::run, this);
+}
+
+void IR_TxThread::stop() { running_.store(false); cv_.notify_one(); }
+void IR_TxThread::join() { if (th_.joinable()) th_.join(); }
+
+std::unique_ptr<WakeHandle> IR_TxThread::create_wake_handle() {
+    return std::make_unique<WakeHandleCondVar>(cv_);
 }
 
 void IR_TxThread::wait_for_frame() {
-    // WakeHandle 구체 타입 의존 없이 latest_seq() 폴링
-    while (running_.load()) {
-        const auto latest = mb_.latest_seq();
-        if (latest != frame_seq_seen_) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    std::unique_lock<std::mutex> lock(mutex_);
+    cv_.wait(lock, [&] { return !running_.load() || mb_.has_new(frame_seq_seen_); });
 }
 
 void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle) {
-    if (!appsrc_ || !handle || !handle->p || !handle->p->data) return;
+    if (!handle || !handle->p || !handle->p->data) return;
 
-    const auto& c = cfg_->ir_tx;
-    const auto [fmt_caps, bpp] = bitdepth_to_caps(c.bitDepth);
+    // Push raw 16-bit little-endian frame directly
+    const int num_pixels = gst_config_.width * gst_config_.height;
+    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(handle->p->data);
 
-    const int w = c.frame.width;
-    const int h = c.frame.height;
-    const size_t row_bytes = static_cast<size_t>(w) * bpp;
-    const size_t total     = row_bytes * h;
+    const size_t buf_bytes = static_cast<size_t>(num_pixels) * sizeof(uint16_t);
+    GstBuffer* buffer = gst_buffer_new_allocate(nullptr, buf_bytes, nullptr);
+    if (!buffer) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to allocate GStreamer buffer" << std::endl;
+        return;
+    }
 
-    // FrameGRAY가 연속 메모리라고 가정(보통 Raw16 조립 결과)
-    auto* sp_copy = new std::shared_ptr<IRFrameHandle>(handle);
+    GstMapInfo map;
+    if (!gst_buffer_map(buffer, &map, GST_MAP_WRITE)) {
+        std::cerr << "[" << name_ << "] ERROR: Failed to map GStreamer buffer" << std::endl;
+        gst_buffer_unref(buffer);
+        return;
+    }
 
-    GstBuffer* buffer = gst_buffer_new_wrapped_full(
-        GST_MEMORY_FLAG_READONLY,
-        (gpointer)handle->p->data,
-        total,
-        0,
-        total,
-        sp_copy,
-        [](gpointer user) {
-            auto* p = static_cast<std::shared_ptr<IRFrameHandle>*>(user);
-            delete p; // shared_ptr 파괴
-        });
+    std::memcpy(map.data, reinterpret_cast<const uint8_t*>(src16), buf_bytes);
+    gst_buffer_unmap(buffer, &map);
 
-    static GstClockTime idx = 0;
-    const GstClockTime duration = gst_util_uint64_scale_int(1, GST_SECOND, c.fps);
-    const GstClockTime pts      = idx * duration;
-    GST_BUFFER_PTS(buffer)      = pts;
-    GST_BUFFER_DTS(buffer)      = pts;
-    GST_BUFFER_DURATION(buffer) = duration;
-    ++idx;
+    GST_BUFFER_PTS(buffer) = handle->ts;
+    GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, gst_config_.fps);
 
-    const auto flow = gst_app_src_push_buffer(appsrc_, buffer);
-    if (flow != GST_FLOW_OK) {
-        // CSV에는 남기지 않음(요청사항). 콘솔로만 경고.
-        LOGW(TAG, "gst_app_src_push_buffer flow=%d", flow);
+    GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
+    if (ret != GST_FLOW_OK) {
+        std::cerr << "[" << name_ << "] WARNING: gst_app_src_push_buffer failed with code: " << ret << std::endl;
     }
 }
 
+// 스레드 메인 루프
 void IR_TxThread::run() {
+    std::cout << "[" << name_ << "] IR TX thread started, streaming to " 
+              << gst_config_.pc_ip << ":" << gst_config_.port << std::endl;
+    
+    uint64_t frames_sent = 0;
+    
     while (running_.load()) {
         wait_for_frame();
         if (!running_.load()) break;
 
-        if (auto hopt = mb_.exchange(nullptr)) {
-            const auto& h = *hopt;
-            double loop_ms = 0.0;
-            CSV_LOG_SIMPLE("IR.Tx", "LOOP_BEGIN", h->seq, 0,0,0,0, "");
-            {
-                ScopedTimerMs t(loop_ms);
-                push_frame_to_gst(h);
+        if (auto handle_opt = mb_.exchange(nullptr)) {
+            push_frame_to_gst(*handle_opt);
+            frames_sent++;
+            
+            // Debug: Print every 30 frames
+            if (frames_sent % 30 == 0) {
+                std::cout << "[" << name_ << "] Sent " << frames_sent << " frames" << std::endl;
             }
-            CSV_LOG_SIMPLE("IR.Tx", "LOOP_END",   h->seq, loop_ms, 0,0,0, "");
         }
+        
+        // Always update frame_seq_seen_ like EO_TxThread
         frame_seq_seen_ = mb_.latest_seq();
     }
-    LOGI(TAG, "run() exit");
+    
+    std::cout << "[" << name_ << "] IR TX thread stopped, total frames sent: " << frames_sent << std::endl;
 }
 
 } // namespace flir

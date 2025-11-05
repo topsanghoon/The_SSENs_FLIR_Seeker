@@ -1,4 +1,3 @@
-//IR_TxThread.hpp
 #pragma once
 
 #include <thread>
@@ -7,58 +6,73 @@
 #include <mutex>
 #include <condition_variable>
 #include <memory>
+// #include <gst/gst.h>
+// #include <gst/app/gstappsrc.h>
 
-#include <gst/gst.h>
-#include <gst/app/gstappsrc.h>
+#include "components/includes/IR_Frame.hpp"
+#include "ipc/mailbox.hpp"
+#include "ipc/wake.hpp"
 
-#include "components/includes/IR_Frame.hpp"      // IRFrameHandle / FrameGRAY
-#include "ipc/mailbox.hpp"                       // SpscMailbox<>
-#include "ipc/wake.hpp"                          // WakeHandle (지금은 신호 안 씀)
-#include "main_config.hpp"                   // AppConfigPtr
-#include "util/common_log.hpp"               // LOGD/LOGI/...
+// GStreamer 타입 전방 선언
+struct _GstElement;
+struct _GstAppSrc;
 
 namespace flir {
 
 class IR_TxThread {
 public:
-    IR_TxThread(std::string name,
-                AppConfigPtr cfg,
-                SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb,
-                WakeHandle& wake);
-    ~IR_TxThread();
+    struct GstConfig {
+        std::string pc_ip = "192.168.0.17"; // 데이터를 수신할 PC의 IP 주소
+        int         port = 5002;             // 사용할 UDP 포트 (matches receiver udpsrc port=5002)
+        int         width = 80;              // 영상 너비 (Lepton 2.5)
+        int         height = 60;             // 영상 높이 (Lepton 2.5)
+        int         fps = 9;                 // Lepton 2.5의 프레임 속도
+    };
 
-    IR_TxThread(const IR_TxThread&) = delete;
-    IR_TxThread& operator=(const IR_TxThread&) = delete;
+    // Constructor with custom GStreamer configuration
+    IR_TxThread(
+        std::string name,
+        SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb,
+        const GstConfig& gst_config
+    );
+    
+    // Constructor with default GStreamer configuration
+    IR_TxThread(
+        std::string name,
+        SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb
+    );
+    
+    ~IR_TxThread();
 
     void start();
     void stop();
     void join();
+    
+    std::unique_ptr<WakeHandle> create_wake_handle();
 
 private:
     void run();
-    void wait_for_frame();                 // latest_seq() 폴링
-    bool init_pipeline();
-    void teardown_pipeline();
+    void wait_for_frame();
+    bool initialize_gstreamer();
     void push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle);
-    
 
-private:
-    // 의존성
+    // === 협력자 / 구성 ===
     std::string name_;
-    AppConfigPtr cfg_;
-    SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb_;
-    WakeHandle& wake_;                     // 현재는 사용하지 않지만 인터페이스 유지
-
-    // 스레드
+    SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb_; 
+    const GstConfig gst_config_;
+    
+    // === 스레드 관리 ===
     std::thread th_;
     std::atomic<bool> running_{false};
-
-    // 상태
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    
+    // === 상태 ===
     uint32_t frame_seq_seen_ = 0;
 
-    // GStreamer
-    GstElement* pipeline_ = nullptr;
-    GstAppSrc*  appsrc_   = nullptr;
+    // === GStreamer 멤버 변수 ===
+    _GstElement* pipeline_ = nullptr;
+    _GstAppSrc*  appsrc_ = nullptr;
 };
 
 } // namespace flir
