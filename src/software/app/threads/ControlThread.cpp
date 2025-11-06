@@ -36,6 +36,7 @@ void ControlThread::start() {
     // 이벤트 기반으로만 깨어난다 (Tracking/Aruco)
     bus_.subscribe(Topic::Tracking, &inbox_, &wake_);
     bus_.subscribe(Topic::Aruco,    &inbox_, &wake_);
+    bus_.subscribe(Topic::User,     &inbox_, &wake_);
 
     th_ = std::thread(&ControlThread::run, this);
 
@@ -68,6 +69,7 @@ bool ControlThread::ready_to_wake() {
 }
 
 void ControlThread::run() {
+    std::cout << "done\n";
     while (running_.load()) {
         {
             std::unique_lock<std::mutex> lk(m_);
@@ -85,6 +87,7 @@ void ControlThread::run() {
             }
         } else {
             // SHUTDOWN 진행
+            std::cout << "come here 2\n";
             step_shutdown_fsm();
         }
     }
@@ -98,22 +101,30 @@ bool ControlThread::drain_events() {
             case EventType::Track: {
                 const auto& x = std::get<TrackEvent>(ev->payload);
                 fusion_.update_with_track(x.box, x.score, x.ts, x.frame_seq);
+                controller_.on_track_event();                // ★ 추가
                 saw_sensing = true;
                 CSV_LOG_SIMPLE("Ctrl", "IN_TRACK", x.frame_seq,
-                               x.box.x, x.box.y, x.box.width, x.box.height, "");
+                            x.box.x, x.box.y, x.box.width, x.box.height, "");
             } break;
 
             case EventType::Aruco: {
                 const auto& x = std::get<ArucoEvent>(ev->payload);
                 fusion_.update_with_marker(x.id, x.box, x.ts);
+                controller_.on_aruco_event(x.id);            // ★ 추가
                 saw_sensing = true;
                 CSV_LOG_SIMPLE("Ctrl", "IN_ARUCO", (uint64_t)x.id,
-                               x.box.x, x.box.y, x.box.width, x.box.height, "");
-
-                // ★ 전환 FSM 입력은 "중기 단계"에서만 평가
+                            x.box.x, x.box.y, x.box.width, x.box.height, "");
                 if (GuidanceState::phase().load() == GuidancePhase::Midcourse) {
                     on_aruco_for_transition(x.id, x.box, x.ts);
                 }
+            } break;
+            case EventType::SelfDestruct: {
+                std::cout << "come here\n";
+                const auto& x = std::get<SelfDestructEvent>(ev->payload);
+                sd_seq_seen_ = x.seq;
+                mode_  = Mode::SHUTDOWN;
+                phase_ = SdPhase::SD_QUIESCE;
+                CSV_LOG_SIMPLE("Ctrl","SD_REQ",x.seq,(double)x.level,0,0,0,"");
             } break;
 
             default: break;
@@ -163,7 +174,9 @@ void ControlThread::maybe_emit_control_if_target() {
 }
 
 void ControlThread::step_shutdown_fsm() {
+    std::cout << "before sd quiesce \n";
     if (phase_ == SdPhase::SD_QUIESCE) {
+        std::cout << "after sd quiesce \n";
         fusion_.set_quiesce(true);
         act_.set_quiesce(true);
 
@@ -173,7 +186,7 @@ void ControlThread::step_shutdown_fsm() {
         Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ sd.to_int(), ts } };
         bus_.push(ev, Topic::Control);
 
-        act_.write_nonblock(sd);
+        act_.stop_io();
         CSV_LOG_SIMPLE("Ctrl", "SELF_DESTRUCT_SENT", 0, (double)sd.to_int(), 0,0,0, "");
 
         phase_ = SdPhase::SD_DONE;

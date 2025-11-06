@@ -7,10 +7,13 @@
 namespace flir {
 
 // ---------- Topics ----------
-enum class Topic : int { Tracking=0, Aruco=1, Control=2 };
+enum class Topic : int { Tracking=0, Aruco=1, Control=2 , User=3};
 
 // ---------- Events ----------
-enum class EventType : uint8_t { Init, Track, Lost, NeedReselect, Aruco, MetaCtrl, CtrlState };
+enum class EventType : uint8_t { Init, Track, Lost, NeedReselect, Aruco, MetaCtrl, CtrlState, UserClick,  SelfDestruct};
+
+struct UserClickEvent   { cv::Rect2f box; uint32_t seq; };  // ★ 추가
+struct SelfDestructEvent{ int level;   uint32_t seq; };     // ★ 추가
 
 struct InitEvent         { cv::Rect2f box; uint64_t ts; uint32_t frame_seq; };
 struct TrackEvent        { cv::Rect2f box; float score; uint64_t ts; uint32_t frame_seq; };
@@ -30,7 +33,8 @@ struct Event {
     EventType type;
     std::variant<
         InitEvent, TrackEvent, LostEvent, NeedReselectEvent,
-        ArucoEvent, MetaCtrlEvent, CtrlStateEvent
+        ArucoEvent, MetaCtrlEvent, CtrlStateEvent,
+        UserClickEvent, SelfDestructEvent
     > payload;
 };
 

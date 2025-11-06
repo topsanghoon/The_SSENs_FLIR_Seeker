@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
+#include <iostream>
 
 // ★ 공용 로거
 #include "util/common_log.hpp"

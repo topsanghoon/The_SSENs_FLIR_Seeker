@@ -1,4 +1,4 @@
-// Meta_TxThread.cpp (CSV-minimal: bus IN만 기록, UDP 송신은 CSV 미기록)
+// Meta_TxThread.cpp (CSV-minimal: bus IN만 기록, UDP 송신은 CSV 미기록; send 성공 콘솔 출력 제거)
 #include "threads_includes/Meta_TxThread.hpp"
 
 // 프로토콜 빌더/이벤트 페이로드 타입은 cpp에서만 include
@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
+#include <array>  // for std::array
 
 // ✅ 공통 유틸
 #include "util/common_log.hpp"
@@ -27,7 +28,6 @@ namespace flir {
 namespace {
 constexpr const char* TAG = "Meta_Tx";
 
-
 inline void drain_eventfd(int efd) {
     uint64_t cnt; while (::read(efd, &cnt, sizeof(cnt)) > 0) {}
 }
@@ -35,7 +35,11 @@ inline void drain_timerfd(int tfd) {
     uint64_t expirations; (void)::read(tfd, &expirations, sizeof(expirations));
 }
 inline itimerspec make_period_ms(int ms) {
-    itimerspec its{}; its.it_value.tv_sec = ms/1000; its.it_value.tv_nsec = (ms%1000)*1000000LL; its.it_interval = its.it_value; return its;
+    itimerspec its{};
+    its.it_value.tv_sec  = ms/1000;
+    its.it_value.tv_nsec = (ms%1000)*1000000LL;
+    its.it_interval      = its.it_value;
+    return its;
 }
 inline bool make_sockaddr_ipv4(const char* ip, uint16_t port, sockaddr_storage& ss, socklen_t& sl) {
     sockaddr_in sa{}; sa.sin_family = AF_INET; sa.sin_port = htons(port);
@@ -84,7 +88,7 @@ void Meta_TxThread::join() {
 }
 
 bool Meta_TxThread::init_io_() {
-    close_io_(); // 방어적
+    close_io_(); // 방어적 정리
 
     epfd_ = ::epoll_create1(EPOLL_CLOEXEC);
     if (epfd_ < 0) { LOGE(TAG, "epoll_create1: %s", strerror(errno)); return false; }
@@ -117,8 +121,11 @@ bool Meta_TxThread::init_io_() {
     }
     if (cfg_->meta_tx.local_port != 0) {
         sockaddr_in a{}; a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_ANY); a.sin_port = htons(cfg_->meta_tx.local_port);
-        if (::bind(sock_, (sockaddr*)&a, sizeof(a)) != 0) LOGE(TAG, "bind :%u failed: %s", cfg_->meta_tx.local_port, strerror(errno));
-        else LOGI(TAG, "bound on :%u", cfg_->meta_tx.local_port);
+        if (::bind(sock_, (sockaddr*)&a, sizeof(a)) != 0) {
+            LOGE(TAG, "bind :%u failed: %s", cfg_->meta_tx.local_port, strerror(errno));
+        } else {
+            LOGI(TAG, "bound on :%u", cfg_->meta_tx.local_port);
+        }
     }
     if (!cfg_->meta_tx.dst.ip.empty() && cfg_->meta_tx.dst.port != 0) {
         sockaddr_storage dst{}; socklen_t dlen = 0;
@@ -169,15 +176,17 @@ void Meta_TxThread::send_aruco_full_(uint64_t ts, int id,
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
                          (sockaddr*)&sa_meta_, sl_meta_);
     if (n < 0) LOGE(TAG, "send_aruco(full) failed: %s", strerror(errno));
-    else LOGDs(TAG) << "TX ARUCO(full) bytes=" << n;
+    // 성공 시 콘솔 출력 없음
 }
 
 // (옵션) 하위호환: bbox-only 가 필요하면 이 함수도 남겨둠
 void Meta_TxThread::send_aruco_bbox_(uint64_t ts, int id, const cv::Rect2f& box) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_aruco(ts, id, box);
-    (void)::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
-                   (sockaddr*)&sa_meta_, sl_meta_);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
+                         (sockaddr*)&sa_meta_, sl_meta_);
+    if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno));
+    // 성공 시 콘솔 출력 없음
 }
 
 void Meta_TxThread::on_eventfd_ready_() {
@@ -202,7 +211,7 @@ void Meta_TxThread::on_eventfd_ready_() {
                 CSV_LOG_SIMPLE("Meta.Tx", "IN_ARUCO", 0, x.id, x.box.x, x.box.y, x.box.width,
                                "h=" + std::to_string(x.box.height));
 
-                // ✅ 코너까지 포함해서 전송
+                // ✅ 코너까지 포함해서 전송 (성공시 콘솔 출력 없음)
                 send_aruco_full_(x.ts, x.id, x.box, x.corners);
                 break;
             }
@@ -227,13 +236,13 @@ void Meta_TxThread::on_eventfd_ready_() {
             default: break;
         }
     }
-    last_sent_ns_ = flir::now_ns_steady();  // ★ 교체
+    last_sent_ns_ = flir::now_ns_steady();
 }
 
 void Meta_TxThread::on_timerfd_ready_() {
     drain_timerfd(tfd_);
-    // HB 전송은 IPC이므로 CSV에 남기지 않음(요청사항). 콘솔 로그도 과도하면 생략 가능.
-    send_hb_(now_ms_epoch());  // HB는 epoch ms
+    // HB 전송은 IPC이므로 CSV에 남기지 않음(요청사항). 콘솔 로그도 과도하면 생략.
+    send_hb_(now_ms_epoch());
 }
 
 // ===== 송신 (cpp에서만 MetaWire 사용) =====
@@ -241,24 +250,29 @@ void Meta_TxThread::send_track_(uint64_t ts, uint32_t seq, float x, float y, flo
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_track(ts, seq, {x,y,w,h}, score);
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
-    if (n < 0) LOGE(TAG, "send_track failed: %s", strerror(errno)); else LOGDs(TAG) << "TX TRACK bytes=" << n;
+    if (n < 0) LOGE(TAG, "send_track failed: %s", strerror(errno));
+    // 성공 시 콘솔 출력 없음
 }
 void Meta_TxThread::send_aruco_(uint64_t ts, int id, float x, float y, float w, float h) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_aruco(ts, id, {x,y,w,h});
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
-    if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno)); else LOGDs(TAG) << "TX ARUCO bytes=" << n;
+    if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno));
+    // 성공 시 콘솔 출력 없음
 }
 void Meta_TxThread::send_ctrl_(uint64_t ts, uint32_t state_or_cmd) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_ctrl(ts, state_or_cmd);
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
-    if (n < 0) LOGE(TAG, "send_ctrl failed: %s", strerror(errno)); else LOGDs(TAG) << "TX CTRL bytes=" << n;
+    if (n < 0) LOGE(TAG, "send_ctrl failed: %s", strerror(errno));
+    // 성공 시 콘솔 출력 없음
 }
 void Meta_TxThread::send_hb_(uint64_t ts) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_hb(ts);
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
-    if (n < 0) LOGE(TAG, "send_hb failed: %s", strerror(errno)); else LOGDs(TAG) << "TX HB bytes=" << n;
+    if (n < 0) LOGE(TAG, "send_hb failed: %s", strerror(errno));
+    // 성공 시 콘솔 출력 없음
 }
+
 } // namespace flir

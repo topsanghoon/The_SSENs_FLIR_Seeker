@@ -175,7 +175,7 @@ int main(int, char**) {
     ControlThread control(bus, mb_sd, fusion, controller, act, ccfg);
 
     Meta_TxThread meta_tx(bus, app);
-    Net_RxThread  net_rx("Net_Rx", app, mb_click);
+    Net_RxThread  net_rx("Net_Rx", app, mb_click, mb_sd, bus);
 
     // ─────────────────────────────────────────────────────────────
     // 3) “push+notify” 경로 확정: 캡처 → 분석 스레드로는 반드시 onFrameArrived 경유
