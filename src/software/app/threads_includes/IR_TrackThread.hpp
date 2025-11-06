@@ -5,6 +5,7 @@
 #include <thread>
 #include <memory>
 #include <opencv2/core.hpp>
+#include <condition_variable>
 
 #include "ipc/ipc_types.hpp"            // Event, EventType, TrackEvent, ...
 #include "ipc/mailbox.hpp"              // SpscMailbox<>
@@ -56,6 +57,8 @@ public:
     void onFrameArrived(std::shared_ptr<IRFrameHandle> h);
     void onClickArrived(const UserCmd& cmd);
 
+    std::unique_ptr<WakeHandle> create_wake_handle();   // ★ 추가
+
 private:
     void run();
     void wait_until_ready();
@@ -73,7 +76,7 @@ private:
 
     void cleanup();
 
-private:
+
     // 의존성
     SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_mb_;
     SpscMailbox<UserCmd>&     click_mb_;
@@ -86,9 +89,10 @@ private:
     std::thread       th_;
     std::atomic<bool> running_{false};
 
-    // 시퀀스 추적(메일박스 has_new용)
-    uint32_t click_seq_seen_{0};
-    uint32_t frame_seq_seen_{0};
+ 
+    uint32_t ir_mb_seq_seen_{0};
+    uint32_t click_mb_seq_seen_{0};
+    uint32_t last_frame_seq_{0};
 
     // 상태
     cv::Rect2f target_box_{};
@@ -96,6 +100,9 @@ private:
     bool       tracking_valid_{false};
     int        fail_streak_{0};
     bool       reselect_notified_{false};
+
+    std::condition_variable cv_;   // ★ 추가
+    std::mutex              m_;    // ★ 추가
 };
 
 } // namespace flir

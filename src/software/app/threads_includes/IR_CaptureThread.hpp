@@ -73,6 +73,7 @@ public:
     uint64_t get_discard_count() const { return discard_count_.load(); }
 
     void reset_camera();
+    void set_track_wake(std::unique_ptr<WakeHandle> w) noexcept { track_wake_ = std::move(w); } // ★ 추가
 
 private:
     std::string name_;
@@ -117,6 +118,7 @@ private:
 
     // 단계 기반 라우팅 (TX는 항상, TRACK은 Terminal에서만)
     void push_frame_routed_(const std::shared_ptr<IRFrameHandle>& h);
+    std::unique_ptr<WakeHandle> track_wake_;   // ★ 추가
 };
 
 } // namespace flir

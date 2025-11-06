@@ -27,6 +27,8 @@ public:
         int         width = 80;              // 영상 너비 (Lepton 2.5)
         int         height = 60;             // 영상 높이 (Lepton 2.5)
         int         fps = 9;                 // Lepton 2.5의 프레임 속도
+
+        
     };
 
     // Constructor with custom GStreamer configuration

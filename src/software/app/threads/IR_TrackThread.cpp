@@ -1,5 +1,6 @@
 // IR_TrackThread.cpp  (CSV unified / CsvLoggerIR 제거)
 #include "threads_includes/IR_TrackThread.hpp"
+#include <iostream>
 #include <condition_variable>
 #include <mutex>
 
@@ -16,9 +17,6 @@ namespace flir {
 
 static constexpr const char* TAG = "IR.Track";
 
-// wake와 관리를 위한 전역 변수(프로세스 내 단일 트래커 가정)
-static std::mutex              g_m;
-static std::condition_variable g_cv;
 
 IR_TrackThread::IR_TrackThread(SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_mb,
                                SpscMailbox<UserCmd>&     click_mb,
@@ -43,7 +41,7 @@ void IR_TrackThread::start() {
 void IR_TrackThread::stop() {
     if (!running_.load()) return;
     running_.store(false);
-    g_cv.notify_all(); // 대기 중이면 깨워서 종료 경로로
+    cv_.notify_all(); // 대기 중이면 깨워서 종료 경로로
 }
 void IR_TrackThread::join() {
     if (th_.joinable()) {
@@ -57,39 +55,39 @@ void IR_TrackThread::join() {
 프레임이 와야 한 스텝이 진행된다.
 */
 void IR_TrackThread::onFrameArrived(std::shared_ptr<IRFrameHandle> h) {
+    
     ir_mb_.push(std::move(h));
-    g_cv.notify_one();
+    cv_.notify_one();
 }
 void IR_TrackThread::onClickArrived(const UserCmd& cmd) {
     click_mb_.push(cmd);
-    g_cv.notify_one();
+    cv_.notify_one();
 }
 
 // 메인 루프
 void IR_TrackThread::run() {
     while (running_.load()) {
-        if (!flir::ir_enabled()) { std::unique_lock<std::mutex> lk(g_m); g_cv.wait_for(lk, std::chrono::milliseconds(5)); continue; }
-
+        if (!flir::ir_enabled()) { std::unique_lock<std::mutex> lk(m_); cv_.wait_for(lk, std::chrono::milliseconds(5)); continue; }
         wait_until_ready();
         if (!running_.load()) break;
 
-        if (click_mb_.has_new(click_seq_seen_)) {
+        if (click_mb_.has_new(click_mb_seq_seen_)) {
             if (auto cmd = click_mb_.exchange(nullptr)) {
                 handle_click(*cmd);
             }
         }
-        if (!ir_mb_.has_new(frame_seq_seen_)) continue;
-
+        if (ir_mb_.latest_seq() == ir_mb_seq_seen_) continue;
+        
         if (auto hopt = ir_mb_.exchange(nullptr)) {
             std::shared_ptr<IRFrameHandle> h = *hopt; // tx와 공유하므로 shared_ptr
             if (h) {
                 double loop_ms = 0.0;
-                CSV_LOG_SIMPLE("IR.Track", "LOOP_BEGIN", h->seq, 0,0,0,0, "");
+                CSV_LOG_SIMPLE("IR.Track", "LOOP_BEGIN", last_frame_seq_, 0,0,0,0, "");
                 {
                     ScopedTimerMs t(loop_ms);
                     on_frame(*h);   // 참조로 넘겨 파생형 가상함수 유지
                 }
-                CSV_LOG_SIMPLE("IR.Track", "LOOP_END",   h->seq, loop_ms, 0,0,0, "");
+                CSV_LOG_SIMPLE("IR.Track", "LOOP_END",   last_frame_seq_, loop_ms, 0,0,0, "");
                 h->release();   // 파생형 release() 허용(기본 no-op)
             }
         }
@@ -98,11 +96,11 @@ void IR_TrackThread::run() {
 }
 
 void IR_TrackThread::wait_until_ready() {
-    std::unique_lock<std::mutex> lk(g_m);
-    g_cv.wait(lk, [&]{
-        return !running_.load() ||
-               click_mb_.latest_seq() > click_seq_seen_ ||
-               ir_mb_.latest_seq()    > frame_seq_seen_;
+    std::unique_lock<std::mutex> lk(m_);
+    cv_.wait(lk, [&]{
+        return !running_.load()
+        || click_mb_.latest_seq() > click_mb_seq_seen_
+        || ir_mb_.latest_seq()    > ir_mb_seq_seen_;
     });
     // 탈출: 종료 or 새 데이터 존재
 }
@@ -110,7 +108,7 @@ void IR_TrackThread::wait_until_ready() {
 void IR_TrackThread::handle_click(const UserCmd& cmd) {
     target_box_         = cmd.box;
     new_target_         = true;
-    click_seq_seen_     = cmd.seq;
+    click_mb_seq_seen_     = cmd.seq;
     fail_streak_        = 0;
     reselect_notified_  = false;
 
@@ -122,7 +120,6 @@ void IR_TrackThread::handle_click(const UserCmd& cmd) {
 }
 
 void IR_TrackThread::on_frame(IRFrameHandle& h) {
-    frame_seq_seen_ = h.seq;
 
     // 1) 프리프로세싱
     cv::Mat pf32;
@@ -226,13 +223,13 @@ bool IR_TrackThread::try_update(const cv::Mat& pf, cv::Rect2f& out_box, float& s
 
 // ==== EventBus 발행 ====
 void IR_TrackThread::emit_init(const cv::Rect2f& b, uint64_t ts) {
-    bus_.push(Event{ EventType::Init,  InitEvent{ b, ts, frame_seq_seen_ } }, Topic::Tracking);
+    bus_.push(Event{ EventType::Init,  InitEvent{ b, ts, ir_mb_seq_seen_ } }, Topic::Tracking);
 }
 void IR_TrackThread::emit_track(const cv::Rect2f& b, float score, uint64_t ts) {
-    bus_.push(Event{ EventType::Track, TrackEvent{ b, score, ts, frame_seq_seen_ } }, Topic::Tracking);
+    bus_.push(Event{ EventType::Track, TrackEvent{ b, score, ts, ir_mb_seq_seen_ } }, Topic::Tracking);
 }
 void IR_TrackThread::emit_lost(const cv::Rect2f& last, uint64_t ts) {
-    bus_.push(Event{ EventType::Lost,  LostEvent{ last, ts, frame_seq_seen_ } }, Topic::Tracking);
+    bus_.push(Event{ EventType::Lost,  LostEvent{ last, ts, ir_mb_seq_seen_ } }, Topic::Tracking);
 }
 void IR_TrackThread::emit_need_reselect() {
     bus_.push(Event{ EventType::NeedReselect, NeedReselectEvent{} }, Topic::Tracking);

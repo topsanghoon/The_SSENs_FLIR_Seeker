@@ -17,8 +17,6 @@
 
 namespace flir {
 
-static std::mutex              g_m_eo;
-static std::condition_variable g_cv_eo;
 using clock_t = std::chrono::steady_clock;
 
 namespace {
@@ -45,7 +43,7 @@ void EO_ArUcoThread::start(){
 void EO_ArUcoThread::stop(){
     LOGI(kTAG, "stop() requested");
     running_.store(false);
-    g_cv_eo.notify_all();
+    cv_.notify_all();
 }
 
 void EO_ArUcoThread::join(){
@@ -56,10 +54,10 @@ void EO_ArUcoThread::join(){
     }
 }
 
+
 void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){
-    // 메일박스에 프레임 넣고, 대기 깨우기
     eo_mb_.push(std::move(h));
-    g_cv_eo.notify_one();
+    cv_.notify_one();                    // ★ 전용 cv로 깨움
 }
 
 void EO_ArUcoThread::run() {
@@ -76,7 +74,7 @@ void EO_ArUcoThread::run() {
     double   stat_min_ms = 1e12;
 
     while (running_.load()) {
-        if (!flir::eo_enabled()) { std::unique_lock<std::mutex> lk(g_m_eo); g_cv_eo.wait_for(lk, std::chrono::milliseconds(5)); continue; }
+        if (!flir::eo_enabled()) { std::unique_lock<std::mutex> lk(m_); cv_.wait_for(lk, std::chrono::milliseconds(5)); continue; }
         
         wait_until_ready();
         if (!running_.load()) break;
@@ -92,6 +90,9 @@ void EO_ArUcoThread::run() {
             {
                 ScopedTimerMs t_all(t_ms_total);
 
+                try{
+
+                
                 // --- 전처리 ---
                 cv::Mat pf;
                 {
@@ -135,6 +136,13 @@ void EO_ArUcoThread::run() {
                 stat_max_ms  = std::max(stat_max_ms, t_ms_total);
                 stat_min_ms  = std::min(stat_min_ms, t_ms_total);
                 if (found) stat_found++; else stat_lost++;
+                } catch(const cv::Exception& e){
+                    LOGE(kTAG, "detect exception: %s", e.what());
+                    CSV_LOG_SIMPLE("EO.Aruco", "DETECT_EX", fr.seq, 0,0,0,0, e.what());
+                    // 통계는 lost로 카운트하거나 skip
+                    stat_lost++;
+                    continue;
+                }
             }
             // 세부 시간 측정치를 별도 이벤트로 남겨 두면 후처리 필터링이 쉬움
             CSV_LOG_SIMPLE("EO.Aruco", "PRE_MS",   fr.seq, t_ms_pre,   0, 0, 0, "");
@@ -168,8 +176,8 @@ void EO_ArUcoThread::run() {
 }
 
 void EO_ArUcoThread::wait_until_ready() {
-    std::unique_lock<std::mutex> lk(g_m_eo);
-    g_cv_eo.wait(lk, [&]{
+    std::unique_lock<std::mutex> lk(m_);
+    cv_.wait(lk, [&]{
         const bool ready = (!running_.load() || eo_mb_.latest_seq() > frame_seq_seen_);
         return ready;
     });

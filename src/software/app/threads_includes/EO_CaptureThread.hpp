@@ -29,6 +29,7 @@ public:
     void set_aru_sink(std::function<void(std::shared_ptr<EOFrameHandle>)> sink) {
         aruco_sink_ = std::move(sink);
     }
+    void set_aru_wake(std::unique_ptr<WakeHandle> w) { aruco_wake_ = std::move(w); } // ★ 추가
 
 private:
     void run_();
@@ -45,6 +46,7 @@ private:
     AppConfigPtr cfg_;
 
     uint64_t seq_{0};
+    std::unique_ptr<WakeHandle> aruco_wake_;   // ★ 추가
 };
 
 } // namespace flir

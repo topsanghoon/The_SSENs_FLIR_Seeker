@@ -3,6 +3,7 @@
 #include <thread>
 #include <memory>
 #include <array>
+#include <condition_variable>
 #include <opencv2/core.hpp>
 
 #include "ipc/ipc_types.hpp"
@@ -39,6 +40,7 @@ public:
     void join();
 
     void onFrameArrived(std::shared_ptr<EOFrameHandle> h);
+    std::unique_ptr<WakeHandle> create_wake_handle(); // ★ 추가
 
 private:
     void run();
@@ -50,7 +52,6 @@ private:
                     const cv::Rect2f& box,
                     uint64_t ts_ns, uint32_t frame_seq);
 
-private:
     SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb_;
     IArucoPreprocessor& preproc_;
     IArucoDetector& detector_;
@@ -59,6 +60,9 @@ private:
     std::thread th_;
     std::atomic<bool> running_{false};
     uint32_t frame_seq_seen_{0};
+
+    std::condition_variable cv_;   // ★ 추가
+    std::mutex              m_;    // ★ 추가
 };
 
 } // namespace flir

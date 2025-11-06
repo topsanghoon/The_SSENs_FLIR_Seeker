@@ -161,18 +161,22 @@ void IR_CaptureThread::cleanup_spi() {
 }
 
 void IR_CaptureThread::push_frame_routed_(const std::shared_ptr<IRFrameHandle>& h) {
-    // 1) TX로는 항상
+    // TX 경로 (기존)
     output_mailbox_.push(h);
     if (wake_handle_) wake_handle_->signal();
 
-    // 2) 단계 기반: Terminal에서만 Tracking
+    // 단계 기반 (기존: Terminal에서만 트랙)
     auto phase = GuidanceState::phase().load(std::memory_order_relaxed);
-    if (phase != GuidancePhase::Terminal) return;
+    const bool route_to_track = (phase == GuidancePhase::Terminal);
+    if (!route_to_track) return;
 
     if (track_sink_) {
-        track_sink_(h);
-    } else if (output_trk_) {
-        output_trk_->push(h);
+        track_sink_(h);                          // onFrameArrived() 경유 → 내부에서 notify
+        return;
+    }
+    if (output_trk_) {
+        output_trk_->push(h);                    // 메일박스 경로
+        if (track_wake_) track_wake_->signal();  // ★ 직접 깨움
     }
 }
 
