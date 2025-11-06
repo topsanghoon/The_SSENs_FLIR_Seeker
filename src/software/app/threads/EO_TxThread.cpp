@@ -121,11 +121,7 @@ void EO_TxThread::wait_for_frame() {
 void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle) {
     if (!appsrc_ || !handle || !handle->p || !handle->p->data) return;
 
-    // 원래 코드와 동일: 실제 stride(step) 기반 크기 사용
-    const guint buffer_size =
-        static_cast<guint>(handle->p->step * handle->p->height);
-
-    // 버퍼 수명 보장을 위해 shared_ptr 복사본을 사용자 데이터로 보관
+    const guint buffer_size = static_cast<guint>(handle->p->step * handle->p->height);
     auto* handle_copy = new std::shared_ptr<EOFrameHandle>(handle);
 
     GstBuffer* buffer = gst_buffer_new_wrapped_full(
@@ -140,21 +136,22 @@ void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle
             delete h_ptr;
         });
 
-    // ns 단위 pts/duration (fps 기준)
     GST_BUFFER_PTS(buffer)      = handle->ts;
     GST_BUFFER_DTS(buffer)      = handle->ts;
     GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, cfg_->eo_tx.fps);
 
     const GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
     if (ret != GST_FLOW_OK) {
-        // ❗ 전송 실패는 콘솔로만 알림. CSV에는 남기지 않음(요청사항).
         LOGE(TAG, "gst_app_src_push_buffer failed: %d", (int)ret);
-    } else {
-        LOGD(TAG, "pushed seq=%u bytes=%u", handle->seq, buffer_size);
     }
 }
 
 void EO_TxThread::run() {
+    uint64_t total_frames = 0;
+    uint64_t sec_frames   = 0;
+    uint64_t sec_bytes    = 0;
+    auto     t0           = std::chrono::steady_clock::now();
+
     while (running_.load()) {
         wait_for_frame();
         if (!running_.load()) break;
@@ -168,10 +165,26 @@ void EO_TxThread::run() {
                 push_frame_to_gst(handle);
             }
             CSV_LOG_SIMPLE("EO.Tx", "LOOP_END", handle->seq, loop_ms, 0,0,0, "");
+
+            // 집계
+            ++total_frames;
+            ++sec_frames;
+            sec_bytes += static_cast<uint64_t>(handle->p->step) * handle->p->height;
         }
         frame_seq_seen_ = mb_.latest_seq();
+
+        // 1초 주기 로그
+        auto now = std::chrono::steady_clock::now();
+        if (now - t0 >= std::chrono::seconds(1)) {
+            LOGI(TAG, "tx stats: fps=%llu, bytes=%llu, total=%llu",
+                 (unsigned long long)sec_frames,
+                 (unsigned long long)sec_bytes,
+                 (unsigned long long)total_frames);
+            sec_frames = sec_bytes = 0;
+            t0 = now;
+        }
     }
-    LOGI(TAG, "run() exit");
+    LOGI(TAG, "run() exit, total_frames=%llu", (unsigned long long)total_frames);
 }
 
 } // namespace flir

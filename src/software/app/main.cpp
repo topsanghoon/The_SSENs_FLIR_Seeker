@@ -129,47 +129,26 @@ int main(int, char**) {
     ir_gst.fps    = app->ir_tx.fps;           // 9
     ir_gst.pc_ip  = app->ir_tx.dst.ip;        // "192.168.0.18"
     ir_gst.port   = app->ir_tx.dst.port;      // 5002
+
+    
     IR_TxThread ir_tx("IR_Tx", mb_ir_tx, ir_gst);
-    // [MOVE-OUT] GStreamer 캡스/파이프라인 문자열 생성은 IR_TxThread 내부 or 별도 Factory로
 
-    // 2) IR Capture: 캡처→(중간 큐) ; 스플리터가 tx/trk로 복제
-    // - Lepton 특성상 캡처와 소비자를 헐겁게 결합하기 위해 중간 큐 사용
-    SpscMailbox<std::shared_ptr<IRFrameHandle>> mb_ir_cap(8); // 캡처 전용 큐
-    auto ir_wake_for_cap   = ir_tx.create_wake_handle(); // 캡처 스레드가 Tx를 깨움
-    auto ir_wake_for_split = ir_tx.create_wake_handle(); // 스플리터도 Tx를 깨울 수 있게 별도 웨이크
+    // 2) IR Capture → (내부 라우팅) TX/Track
+    auto ir_wake_for_cap = ir_tx.create_wake_handle();
+
     IRCaptureConfig ir_cap_cfg{};
-    ir_cap_cfg.spi_device      = "/dev/spidev1.0";
-    ir_cap_cfg.spi_speed       = 20'000'000;  // Lepton 3.x 상한부근. 불안정 시 16MHz 권장.
-    ir_cap_cfg.spi_delay_usecs = 0;
-    ir_cap_cfg.fps             = app->ir_tx.fps;
-    IR_CaptureThread ir_cap("IR_Cap", mb_ir_cap, std::move(ir_wake_for_cap), ir_cap_cfg);
-    // [MOVE-OUT] SPI 디바이스/속도/지연은 config로
+    ir_cap_cfg.spi_device      = "/dev/spidev1.0";  // ★ main에서 주입
+    ir_cap_cfg.spi_speed       = 2'000'000;        // ★ main에서 주입 (안정성 필요시 16MHz 권장)
+    ir_cap_cfg.spi_delay_usecs = 0;                 // ★ main에서 주입
+    ir_cap_cfg.fps             = app->ir_tx.fps;    // ★ main에서 주입
 
-    // 3) IR Splitter: mb_ir_cap → (mb_ir_tx, mb_ir_trk) 로 fan-out
-    // - 현재는 메인에서 직접 스레드로 구현.
-    // [MOVE-OUT] Fan-out은 별도 클래스로 추출(ex. IR_FanOutThread)하여 테스트/교체 용이성 확보
-    std::atomic<bool> splitter_run{true};
-    std::thread ir_splitter([&](){
-        while (splitter_run.load()) {
-            if (auto hopt = mb_ir_cap.exchange(nullptr)) {
-                auto frame = *hopt;
+    // 캡처 스레드의 출력 메일박스를 "직접" TX 메일박스로 연결
+    IR_CaptureThread ir_cap("IR_Cap", mb_ir_tx, mb_ir_trk, std::move(ir_wake_for_cap), ir_cap_cfg);
 
-                // TX는 항상 전송
-                mb_ir_tx.push(frame);
 
-                // ★ 단계 기반 라우팅: Terminal에서만 Tracking으로 전송
-                auto phase = GuidanceState::phase().load(std::memory_order_relaxed);
-                if (phase == GuidancePhase::Terminal) {
-                    mb_ir_trk.push(frame);
-                }
 
-                // TX 깨우기 (필요시 Tracking도 깰 웨이크가 있으면 같이 호출 가능)
-                ir_wake_for_split->signal();
-            } else {
-                std::this_thread::sleep_for(1ms);
-            }
-        }
-    });
+
+
 
     // === 분석 스레드 ===
     // IR 전처리/트래커 선택
@@ -258,8 +237,8 @@ int main(int, char**) {
     eo_cap.stop();   eo_cap.join();
 
     // splitter 종료
-    splitter_run.store(false);
-    if (ir_splitter.joinable()) ir_splitter.join();
+    // splitter_run.store(false);
+    // if (ir_splitter.joinable()) ir_splitter.join();
 
     return 0;
 }

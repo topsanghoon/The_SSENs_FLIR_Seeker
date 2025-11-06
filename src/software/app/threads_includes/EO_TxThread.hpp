@@ -12,7 +12,7 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
-#include "main_config.hpp"                          // AppConfig/AppConfigPtr
+#include "main_config.hpp"                          // AppConfig/AppConfigPtr 
 #include "util/common_log.hpp"                      // LOG*
 #include "ipc/mailbox.hpp"                              // SpscMailbox
 #include "ipc/wake.hpp"                                 // WakeHandle
