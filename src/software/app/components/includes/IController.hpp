@@ -35,7 +35,7 @@ public:
         const auto b  = tf.last_box();
         const float cx = b.x + b.width * 0.5f;
         const float center = 0.5f * static_cast<float>(frame_w);
-        const float div_val = frame_w / 160;
+        const float div_val = frame_w / 80;
         const float err = cx - center;
 
         CtrlCmd c{};

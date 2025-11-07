@@ -85,6 +85,8 @@ void EO_ArUcoThread::run() {
             auto& sh = *h_opt;                // std::shared_ptr<EOFrameHandle>&
             const EOFrameHandle& fr = *sh;    // EOFrameHandle& → 인터페이스에 맞는 실제 객체
 
+            frame_seq_seen_ = fr.seq;
+
             double t_ms_total = 0.0, t_ms_pre = 0.0, t_ms_det = 0.0;
             CSV_LOG_SIMPLE("EO.Aruco", "LOOP_BEGIN", fr.seq, 0,0,0,0, "");
             {
@@ -100,12 +102,18 @@ void EO_ArUcoThread::run() {
                     preproc_.run(fr, pf);     // const EOFrameHandle& 로 전달
                 }
 
+                if (pf.empty()) {
+                    CSV_LOG_SIMPLE("EO.Aruco", "PRE_EMPTY", fr.seq, 0,0,0,0, "");
+                    continue;
+                }
+
                 // --- 검출 ---
                 std::vector<IArucoDetector::Detection> detections;
                 {
                     ScopedTimerMs t_det(t_ms_det);
                     detections = detector_.detect(pf);
                 }
+
                 const bool found = !detections.empty();
 
                 if (found) {

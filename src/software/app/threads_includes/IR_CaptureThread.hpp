@@ -6,6 +6,7 @@
 #include <vector>
 #include <chrono>
 #include <functional>
+#include <condition_variable>
 
 #include <opencv2/core.hpp>
 #include "components/includes/IR_Frame.hpp"
@@ -29,7 +30,7 @@ namespace vospi {
 
 struct IRCaptureConfig {
     std::string spi_device = "/dev/spidev1.0";
-    uint32_t spi_speed = 12'500'000;
+    uint32_t spi_speed = 2'000'000;
     int fps = 9;
     // inter-transfer delay between chip-select toggles (µs)
     uint32_t spi_delay_usecs = 50;
@@ -86,8 +87,17 @@ private:
     std::atomic<bool> running_{false};
 
     int spi_fd_;
+    std::mutex spi_mutex_;  // Protects SPI operations from concurrent access
+
+    // Safe reset mechanism
+    std::atomic<bool> reset_requested_{false};
+    std::mutex reset_mutex_;
+    std::condition_variable reset_cv_;
+    void perform_safe_reset();  // Only called by capture thread at safe points
+
     std::vector<uint8_t>  segment_buffer_;
     std::vector<uint16_t> frame_buffer_;
+    std::vector<uint8_t> packet_buffer_;       // Heap-allocated packet buffer (moved from stack to prevent overflow)
 
     std::atomic<uint64_t> frame_count_{0};
     std::atomic<uint64_t> error_count_{0};

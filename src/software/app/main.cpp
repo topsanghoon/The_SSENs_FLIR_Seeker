@@ -62,7 +62,7 @@ int main(int, char**) {
 
         // EO 송출
         app->eo_tx.frame = {320,240};
-        app->eo_tx.fps = 15;
+        app->eo_tx.fps = 30;
         app->eo_tx.jpeg_quality = 30;
         app->eo_tx.dst = {"192.168.0.18", 5003};
 
@@ -190,6 +190,7 @@ int main(int, char**) {
     // ※ 메일박스로 직접 push만 하는 경로는 사용하지 않음(놓치면 영원히 안 깰 수 있음).
     //    꼭 사용해야 한다면 소비자에서 받은 WakeHandle.signal()까지 함께 호출할 것.
 
+    control.set_on_shutdown([&]{ g_quit.store(true); });
     // ─────────────────────────────────────────────────────────────
     // 4) Start (소비자 → 프로듀서 → Tx 순으로 켜면 초기 드롭 최소화)
     // ─────────────────────────────────────────────────────────────
@@ -210,20 +211,22 @@ int main(int, char**) {
     while (!g_quit.load()) std::this_thread::sleep_for(50ms);
 
     // ─────────────────────────────────────────────────────────────
-    // 5) Stop (역순 정지)
-    // ─────────────────────────────────────────────────────────────
+    // 5) Stop (권장 순서)
     control.stop();  control.join();
     net_rx.stop();   net_rx.join();
     meta_tx.stop();  meta_tx.join();
 
-    ir_tx.stop();    ir_tx.join();
-    eo_tx.stop();    eo_tx.join();
+    // 분석 먼저 정지
+    ir_track.stop(); ir_track.join();
+    eo_aru.stop();   eo_aru.join();
 
+    // 캡처 정지 (wake/push 발생 주체를 먼저 끊는다)
     ir_cap.stop();   ir_cap.join();
     eo_cap.stop();   eo_cap.join();
 
-    ir_track.stop(); ir_track.join();
-    eo_aru.stop();   eo_aru.join();
+    // 마지막에 Tx 정지 (GStreamer 파이프라인 보유자)
+    ir_tx.stop();    ir_tx.join();
+    eo_tx.stop();    eo_tx.join();
 
     return 0;
 }

@@ -183,7 +183,7 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
 
     if (ok) {
         target_box_        = out;
-        fail_streak_       = 0;
+        fail_streak_       = 0; 
         reselect_notified_ = false;
         emit_track(out, score, h.ts);
 

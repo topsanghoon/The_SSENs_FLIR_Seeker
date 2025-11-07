@@ -43,7 +43,7 @@ private:
     // send helpers (헤더에 외부 패킷 타입 노출 안 함)
     void send_track_(uint64_t ts, uint32_t seq, float x, float y, float w, float h, float score);
     void send_aruco_(uint64_t ts, int id, float x, float y, float w, float h);
-    void send_ctrl_(uint64_t ts, uint32_t state_or_cmd);
+    void send_ctrl_(uint64_t ts, int state_or_cmd);
     void send_hb_(uint64_t ts);
     void send_aruco_full_(uint64_t ts, int id, const cv::Rect2f& box,
                       const std::array<cv::Point2f,4>& c);

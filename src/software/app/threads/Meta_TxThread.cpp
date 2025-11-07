@@ -23,6 +23,7 @@
 #include "util/csv_sink.hpp"
 #include "util/telemetry.hpp"
 
+
 namespace flir {
 
 namespace {
@@ -260,7 +261,7 @@ void Meta_TxThread::send_aruco_(uint64_t ts, int id, float x, float y, float w, 
     if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno));
     // 성공 시 콘솔 출력 없음
 }
-void Meta_TxThread::send_ctrl_(uint64_t ts, uint32_t state_or_cmd) {
+void Meta_TxThread::send_ctrl_(uint64_t ts, int state_or_cmd) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_ctrl(ts, state_or_cmd);
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);

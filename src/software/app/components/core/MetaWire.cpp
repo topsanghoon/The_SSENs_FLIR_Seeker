@@ -86,15 +86,16 @@ MetaBuffer build_aruco_full(uint64_t ts, int id,
 }
 
 MetaBuffer build_ctrl(uint64_t ts, int state_or_cmd) {
-    CtrlBody body{};
-    body.state_or_cmd = state_or_cmd;
+    MetaBuffer w;
+    put8(w.bytes, VER);            // 0x01
+    put8(w.bytes, T_CTRL);         // 0x03
+    put8(w.bytes, 0);              // rsv(1)
+    put8(w.bytes, 0);              // rsv(1)  ← 총 헤더 4바이트 맞춤
 
-    MetaBuffer mb;
-    mb.bytes.reserve(sizeof(MetaMsgHeader) + sizeof(CtrlBody));
-    auto hdr = make_hdr(MetaMsgType::Ctrl, ts, 0, sizeof(CtrlBody));
-    put_bytes(mb.bytes, &hdr,  sizeof(hdr));
-    put_bytes(mb.bytes, &body, sizeof(body));
-    return mb;
+    put64(w.bytes, ts);                                  // p+0 .. p+7
+    put32(w.bytes, static_cast<uint32_t>(state_or_cmd)); // p+8 .. p+11
+
+    return w;
 }
 
 MetaBuffer build_hb(uint64_t ts) {

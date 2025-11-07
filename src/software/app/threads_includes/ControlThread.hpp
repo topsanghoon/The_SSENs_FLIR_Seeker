@@ -49,6 +49,9 @@ public:
     void stop();
     void join();
 
+    using ShutdownCb = std::function<void()>;
+    void set_on_shutdown(ShutdownCb cb) { on_shutdown_ = std::move(cb); }
+
 private:
     using clock_t = std::chrono::steady_clock;
 
@@ -119,6 +122,9 @@ private:
             cv->notify_one();
         }
     } wake_;
+
+    ShutdownCb on_shutdown_;
 };
+
 
 } // namespace flir

@@ -166,7 +166,7 @@ void ControlThread::maybe_emit_control_if_target() {
                    (double)cmd.to_int(), 0,0,0, "");
 
     // Meta_TxThread로 게시
-    Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ cmd.to_int(), ts } };
+    Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ (int)cmd.p1, ts } };
     bus_.push(ev, Topic::Control);
 
     // UART 비차단 송신
@@ -191,6 +191,8 @@ void ControlThread::step_shutdown_fsm() {
 
         phase_ = SdPhase::SD_DONE;
         mode_  = Mode::SHUTDOWN;
+
+        if (on_shutdown_) on_shutdown_();
     }
 }
 

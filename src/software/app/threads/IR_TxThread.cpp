@@ -1,3 +1,4 @@
+// IR_TxThread.cpp (merged: safety fixes + GRAY16->GRAY8 + JPEG pipeline)
 #include "threads_includes/IR_TxThread.hpp"
 #include "ipc/wake_condvar.hpp"
 #include <chrono>
@@ -8,10 +9,13 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
-// ★ OpenCV 추가: 16→8비트 정규화에 사용
+// OpenCV for 16->8 normalization
 #include <opencv2/opencv.hpp>
 
-// ★ 공용 로거 & CSV
+// 우리 IRMatHandle 타입 체크용 (수명 보장)
+#include "threads_includes/IR_CaptureThread.hpp"  // IRMatHandle
+
+// 공용 로그/CSV
 #include "util/common_log.hpp"
 #include "util/csv_sink.hpp"
 #include "util/time_util.hpp"
@@ -20,11 +24,7 @@ namespace flir {
 
 namespace { constexpr const char* TAG = "IR_Tx"; }
 
-// ─────────────────────────────────────────────────────────────
-// 16U(열상) → 8U(표시/전송) 정규화
-//   7000~10000 DN → 0~255 로 매핑 (요청값)
-//   필요하면 추후 cfg에서 받아오도록 확장 가능
-// ─────────────────────────────────────────────────────────────
+// 16U(열상) → 8U 정규화 (7000~10000 → 0~255)
 static inline void normalize16_to8(const IRFrame16& f, cv::Mat& out8,
                                    double minVal = 7000.0, double maxVal = 10000.0)
 {
@@ -35,7 +35,7 @@ static inline void normalize16_to8(const IRFrame16& f, cv::Mat& out8,
     const double scale = 255.0 / (maxVal - minVal);
     const double delta = -minVal * scale;
 
-    out8.create(h, w, CV_8UC1);           // 연속(contiguous) 버퍼
+    out8.create(h, w, CV_8UC1);
     src16.convertTo(out8, CV_8U, scale, delta);
 }
 
@@ -48,21 +48,23 @@ IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHa
 IR_TxThread::~IR_TxThread() {
     stop();
 
-    // EOS 전달 후 정리
+    // EOS를 먼저 appsrc에 알림
     if (pipeline_ && appsrc_) {
         gst_app_src_end_of_stream((GstAppSrc*)appsrc_);
     }
     join();
 
     if (pipeline_) {
-        GstBus* bus = gst_element_get_bus(pipeline_);
-        if (bus) {
+        // EOS/ERROR 한 번 받아서 정리 기회 제공
+        if (GstBus* bus = gst_element_get_bus(pipeline_)) {
             gst_bus_timed_pop_filtered(bus, 500 * GST_MSECOND,
-                (GstMessageType)(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+                                       (GstMessageType)(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
             gst_object_unref(bus);
         }
+
         gst_element_set_state(pipeline_, GST_STATE_NULL);
         (void)gst_element_get_state(pipeline_, nullptr, nullptr, GST_SECOND);
+
         gst_object_unref(pipeline_);
         pipeline_ = nullptr;
         appsrc_   = nullptr;
@@ -77,12 +79,15 @@ bool IR_TxThread::initialize_gstreamer() {
         LOGI(TAG, "gst_init()");
     }
 
-    // ⬇️ GRAY16_LE → GRAY8 로 변경
+    // 입력 GRAY8 → jpegenc → udpsink (수신 WPF와 합의된 파이프라인)
     std::stringstream ss;
     ss << "appsrc name=ir_appsrc is-live=true do-timestamp=true block=true format=TIME "
        << "caps=video/x-raw,format=GRAY8,width=" << gst_config_.width
        << ",height=" << gst_config_.height
        << ",framerate=" << gst_config_.fps << "/1 ! "
+       << "videoscale ! video/x-raw,width=80,height=60 ! "
+       << "videoconvert ! video/x-raw,format=I420 ! "
+       << "jpegenc quality=" << 95 << " ! "
        << "udpsink host=" << gst_config_.pc_ip
        << " port=" << gst_config_.port
        << " sync=false async=false";
@@ -128,8 +133,19 @@ void IR_TxThread::start() {
     CSV_LOG_SIMPLE("IR.Tx", "THREAD_START", 0, 0,0,0,0, "");
 }
 
-void IR_TxThread::stop() { running_.store(false); cv_.notify_one(); LOGI(TAG, "stop requested"); }
-void IR_TxThread::join() { if (th_.joinable()) { th_.join(); LOGI(TAG, "thread joined"); CSV_LOG_SIMPLE("IR.Tx", "THREAD_STOP", 0, 0,0,0,0, ""); } }
+void IR_TxThread::stop() {
+    running_.store(false);
+    cv_.notify_one();
+    LOGI(TAG, "stop requested");
+}
+
+void IR_TxThread::join() {
+    if (th_.joinable()) {
+        th_.join();
+        LOGI(TAG, "thread joined");
+        CSV_LOG_SIMPLE("IR.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
+    }
+}
 
 std::unique_ptr<WakeHandle> IR_TxThread::create_wake_handle() {
     return std::make_unique<WakeHandleCondVar>(cv_);
@@ -140,29 +156,43 @@ void IR_TxThread::wait_for_frame() {
     cv_.wait(lock, [&] { return !running_.load() || mb_.has_new(frame_seq_seen_); });
 }
 
-// 16U → 8U 정규화 후 GRAY8로 전송
+// 안전한 프레임 푸시(세그폴트 방지) : 16U→8U 정규화 후 GRAY8 전송
 void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle) {
-    if (!handle || !handle->p || !handle->p->data) return;
+    // 0) 핸들/포인터 유효성
+    if (!handle) { LOGE(TAG, "Null frame handle"); return; }
+    if (!handle->p) { LOGE(TAG, "Null IRFrame16 pointer"); return; }
+    if (!handle->p->data) { LOGE(TAG, "Null frame data"); return; }
+
+    // 1) Mat 소유 수명 보장: IRMatHandle이면 keep를 강참조로 잡고 포인터 일치 확인
+    std::shared_ptr<cv::Mat> mat_keeper;
+    if (auto* mat_handle = dynamic_cast<IRMatHandle*>(handle.get())) {
+        if (!mat_handle->keep || mat_handle->keep->empty() || !mat_handle->keep->data) {
+            LOGE(TAG, "Invalid cv::Mat in handle");
+            return;
+        }
+        if (mat_handle->keep->data != reinterpret_cast<uint8_t*>(handle->p->data)) {
+            LOGE(TAG, "Data pointer mismatch (possible use-after-free)");
+            return;
+        }
+        mat_keeper = mat_handle->keep; // 복사 중 수명 보장
+    }
 
     const IRFrame16& f = *handle->p;
 
-    if (f.width != gst_config_.width || f.height != gst_config_.height) {
-        LOGW(TAG, "frame size mismatch: got %dx%d, expected %dx%d",
-             f.width, f.height, gst_config_.width, gst_config_.height);
-    }
-
-    // 1) 16U → 8U 변환
+    // 2) 16U → 8U 정규화
     cv::Mat gray8;
-    normalize16_to8(f, gray8); // 7000~10000 → 0~255
+    normalize16_to8(f, gray8);  // 7000~10000 → 0~255
 
-    const size_t payload_bytes = static_cast<size_t>(gst_config_.width) * gst_config_.height; // 1바이트/픽셀
-
-    // 2) GStreamer 버퍼 생성
-    GstBuffer* buffer = gst_buffer_new_allocate(nullptr, payload_bytes, nullptr);
-    if (!buffer) {
-        LOGE(TAG, "gst_buffer_new_allocate failed");
+    const size_t need_bytes = static_cast<size_t>(gst_config_.width) * gst_config_.height; // caps와 동일해야 함
+    if (static_cast<size_t>(gray8.total()) != need_bytes) {
+        LOGE(TAG, "size mismatch: gray8=%zu, caps=%zu (drop frame)",
+             (size_t)gray8.total(), need_bytes);
         return;
     }
+
+    // 3) GST 버퍼 생성/매핑
+    GstBuffer* buffer = gst_buffer_new_allocate(nullptr, need_bytes, nullptr);
+    if (!buffer) { LOGE(TAG, "gst_buffer_new_allocate failed"); return; }
 
     GstMapInfo map;
     if (!gst_buffer_map(buffer, &map, GST_MAP_WRITE)) {
@@ -170,32 +200,38 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
         gst_buffer_unref(buffer);
         return;
     }
+    if (map.size < need_bytes) {
+        LOGE(TAG, "gst buffer too small: %zu < %zu", (size_t)map.size, need_bytes);
+        gst_buffer_unmap(buffer, &map);
+        gst_buffer_unref(buffer);
+        return;
+    }
 
-    // 3) 연속 메모리로 바로 복사
-    //    (gray8은 우리가 생성했으므로 contiguous)
-    std::memcpy(map.data, gray8.data, payload_bytes);
+    // 4) 복사 (mat_keeper가 scope에 있어 데이터 수명 보장)
+    std::memcpy(map.data, gray8.data, need_bytes);
     gst_buffer_unmap(buffer, &map);
 
-    // 4) 타임스탬프
-    GST_BUFFER_PTS(buffer)      = handle->ts;
+    // 5) 타임스탬프/길이
+    GST_BUFFER_PTS(buffer)      = handle->ts; // ns 단위(우리 생성 ts가 ns)
     GST_BUFFER_DTS(buffer)      = handle->ts;
     GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, gst_config_.fps);
 
+    // 6) push (실패 시 반드시 unref)
     const GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
     if (ret != GST_FLOW_OK) {
-        // 전송 실패는 상위 루프에서 통계만 + CSV 남김
-        throw std::runtime_error("gst_app_src_push_buffer failed");
+        LOGE(TAG, "gst_app_src_push_buffer failed (%d)", (int)ret);
+        gst_buffer_unref(buffer); // ★ 중요: 실패 시 우리 소유
+        return;
     }
+    // 성공 시 GStreamer가 buffer 소유
 }
 
 void IR_TxThread::run() {
-    uint64_t total_frames = 0;
-    uint64_t sec_frames   = 0;
-    uint64_t sec_bytes    = 0;
-    uint64_t sec_fail     = 0;
-    auto     t0           = std::chrono::steady_clock::now();
+    uint64_t total_frames = 0, sec_frames = 0, sec_bytes = 0, sec_fail = 0;
+    auto t0 = std::chrono::steady_clock::now();
 
-    LOGI(TAG, "streaming → %s:%d (GRAY8)", gst_config_.pc_ip.c_str(), gst_config_.port);
+    LOGI(TAG, "streaming → %s:%d (GRAY8)",
+         gst_config_.pc_ip.c_str(), gst_config_.port);
 
     while (running_.load()) {
         wait_for_frame();
@@ -205,25 +241,24 @@ void IR_TxThread::run() {
             const auto& handle = *handle_opt;
 
             double loop_ms = 0.0;
-            CSV_LOG_SIMPLE("IR.Tx", "LOOP_BEGIN", handle->seq, 0,0,0,0, "");
+            CSV_LOG_SIMPLE("IR.Tx", "LOOP_BEGIN", handle ? handle->seq : 0, 0,0,0,0, "");
             try {
                 ScopedTimerMs timer(loop_ms);
                 push_frame_to_gst(handle);
             } catch (const std::exception& e) {
                 ++sec_fail;
-                CSV_LOG_SIMPLE("IR.Tx", "PUSH_FAIL", handle->seq, 0,0,0,0, e.what());
+                CSV_LOG_SIMPLE("IR.Tx", "PUSH_FAIL", handle ? handle->seq : 0, 0,0,0,0, e.what());
             }
-            CSV_LOG_SIMPLE("IR.Tx", "LOOP_END", handle->seq, loop_ms, 0,0,0, "");
+            CSV_LOG_SIMPLE("IR.Tx", "LOOP_END", handle ? handle->seq : 0, loop_ms, 0,0,0, "");
 
             ++total_frames;
             ++sec_frames;
-            // ⬇️ GRAY8 전송 바이트
-            sec_bytes += static_cast<uint64_t>(gst_config_.width) * gst_config_.height;
+            sec_bytes += static_cast<uint64_t>(gst_config_.width) * gst_config_.height; // GRAY8 바이트
         }
 
         frame_seq_seen_ = mb_.latest_seq();
 
-        // 1초 주기 로그만 출력
+        // 1초 주기 통계
         auto now = std::chrono::steady_clock::now();
         if (now - t0 >= std::chrono::seconds(1)) {
             LOGI(TAG, "tx stats: fps=%llu, bytes=%llu, push_fail=%llu, total=%llu",

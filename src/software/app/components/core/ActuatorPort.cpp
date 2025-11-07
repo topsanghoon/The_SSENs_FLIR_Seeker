@@ -115,13 +115,11 @@ void UART_ActuatorPort::set_quiesce(bool q) {
 
 // --- stop_io: 안전정지 바이트 전송(에러 무시) ---
 void UART_ActuatorPort::stop_io() {
-    std::cout << "before if\n";
     if (fd_ == -1) {
         CSV_LOG_SIMPLE(TAG, "STOP_IO_SKIP", 0, 0,0,0,0, "fd<0");
         return;
     }
-    std::cout << "after if\n";
-    int desired = static_cast<int>(120);
+    int desired = static_cast<int>(119);
     int8_t stop_val = clamp_to_i8(desired);
     bool clamped = (desired != static_cast<int>(stop_val));
 

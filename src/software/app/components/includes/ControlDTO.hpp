@@ -16,7 +16,7 @@ struct CtrlCmd {
     // 자폭 알림 명령
     static CtrlCmd make_self_destruct() {
         CtrlCmd c;
-        c.mode = 99;  
+        c.mode = 119;  
         c.p1 = c.p2 = c.p3 = 119;  // 아두이노 측에서 119를 STOP으로 처리
         return c;
     }
