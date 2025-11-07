@@ -197,7 +197,34 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
         return;
     }
 
+    // CRITICAL: Keep a strong reference to the cv::Mat during memcpy
+    // This ensures the Mat data cannot be freed mid-copy
+    std::shared_ptr<cv::Mat> mat_keeper;
+    if (mat_handle && mat_handle->keep) {
+        mat_keeper = mat_handle->keep;  // Strong reference
+        
+        // Revalidate Mat is still valid
+        if (mat_keeper->empty() || !mat_keeper->data) {
+            std::cerr << "[" << name_ << "] ERROR: cv::Mat became invalid before memcpy!" << std::endl;
+            gst_buffer_unmap(buffer, &map);
+            gst_buffer_unref(buffer);
+            return;
+        }
+        
+        // Verify pointer still matches
+        if (mat_keeper->data != reinterpret_cast<uint8_t*>(handle->p->data)) {
+            std::cerr << "[" << name_ << "] ERROR: Data pointer changed before memcpy!" << std::endl;
+            gst_buffer_unmap(buffer, &map);
+            gst_buffer_unref(buffer);
+            return;
+        }
+        
+        // Update src16 to use mat_keeper's data directly
+        src16 = reinterpret_cast<const uint16_t*>(mat_keeper->data);
+    }
+
     std::memcpy(map.data, reinterpret_cast<const uint8_t*>(src16), buf_bytes);
+    // mat_keeper goes out of scope after memcpy completes, keeping Mat alive
     gst_buffer_unmap(buffer, &map);
 
     GST_BUFFER_PTS(buffer) = handle->ts;
