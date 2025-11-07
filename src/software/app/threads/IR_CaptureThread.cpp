@@ -21,6 +21,7 @@ IR_CaptureThread::IR_CaptureThread(
 	, spi_fd_(-1)
 	, segment_buffer_(vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE)
 	, frame_buffer_(vospi::FRAME_WIDTH * vospi::FRAME_HEIGHT)
+	, packet_buffer_(vospi::PACKET_SIZE)  // Heap-allocated, prevents stack overflow
 {
 }
 
@@ -31,9 +32,11 @@ IR_CaptureThread::~IR_CaptureThread() {
 }
 
 // Power cycle Lepton by closing and reopening SPI
-void IR_CaptureThread::reset_camera() {
-	std::cout << "[" << name_ << "] Resetting camera..." << std::endl;
-    
+// MUST be called ONLY by capture thread at safe points (not during SPI transfer)
+void IR_CaptureThread::perform_safe_reset() {
+	// CRITICAL: Acquire lock before touching SPI file descriptor
+	std::lock_guard<std::mutex> lock(spi_mutex_);
+	
 	if (spi_fd_ >= 0) {
 		close(spi_fd_);
 		spi_fd_ = -1;
@@ -47,7 +50,6 @@ void IR_CaptureThread::reset_camera() {
 			uint8_t reboot_cmd[4] = {0x08, 0x02, 0x00, 0x00};
 			ssize_t written = write(i2c_fd, reboot_cmd, 4);
 			if (written == 4) {
-				std::cout << "[" << name_ << "] Sent Lepton reboot command via I2C." << std::endl;
 				usleep(750000); // Wait 750ms for reboot
 			} else {
 				std::cerr << "[" << name_ << "] Failed to send Lepton reboot command via I2C." << std::endl;
@@ -63,17 +65,37 @@ void IR_CaptureThread::reset_camera() {
 	// Wait for camera to stabilize
 	std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
+	// Clear reset request flag
+	reset_requested_.store(false);
+
 	// Reopen SPI
 	if (!initialize_spi()) {
 		std::cerr << "[" << name_ << "] Failed to reinitialize SPI after reset" << std::endl;
 	}
+	
+	// Notify waiters that reset is complete
+	reset_cv_.notify_one();
+}
+
+// Legacy function for external callers - now safely delegates to capture thread
+void IR_CaptureThread::reset_camera() {
+	reset_requested_.store(true);
+	// Wait for capture thread to perform reset
+	std::unique_lock<std::mutex> lock(reset_mutex_);
+	reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
+		return !reset_requested_.load();
+	});
 }
 
 void IR_CaptureThread::start() {
 	if (th_.joinable()) return;
     
-	if (!initialize_spi()) {
-		throw std::runtime_error("IR_CaptureThread failed to initialize SPI");
+	// Initialize SPI with mutex protection
+	{
+		std::lock_guard<std::mutex> lock(spi_mutex_);
+		if (!initialize_spi()) {
+			throw std::runtime_error("IR_CaptureThread failed to initialize SPI");
+		}
 	}
     
 	running_.store(true);
@@ -86,6 +108,7 @@ void IR_CaptureThread::start() {
 void IR_CaptureThread::stop() {
 	running_.store(false);
 	watchdog_running_.store(false);
+	reset_cv_.notify_all();  // Wake up watchdog if waiting
 }
 
 void IR_CaptureThread::join() {
@@ -105,6 +128,11 @@ void IR_CaptureThread::watchdog_run() {
 	while (watchdog_running_.load()) {
 		std::this_thread::sleep_for(std::chrono::seconds(2));
         
+		// Don't check if capture thread is not running
+		if (!running_.load()) {
+			continue;
+		}
+		
 		uint64_t current_count = frame_count_.load();
         
 		if (current_count == last_frame_count && current_count > 0) {
@@ -112,9 +140,19 @@ void IR_CaptureThread::watchdog_run() {
 			std::cerr << "[" << name_ << "] WARNING: No new frames for " 
 					  << (stuck_count * 2) << "s (stuck at " << current_count << " frames)" << std::endl;
             
-			if (stuck_count >= 2) {  // 4 seconds of no frames
-				std::cerr << "[" << name_ << "] Resetting camera due to freeze..." << std::endl;
-				reset_camera();
+			if (stuck_count >= 3) {  // 6 seconds of no frames
+				std::cerr << "[" << name_ << "] Requesting camera reset due to freeze..." << std::endl;
+				// SAFE: Only set flag, let capture thread perform reset at safe point
+				reset_requested_.store(true);
+				
+				// Wait for capture thread to complete reset (max 5 seconds)
+				std::unique_lock<std::mutex> lock(reset_mutex_);
+				if (!reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
+					return !reset_requested_.load();
+				})) {
+					std::cerr << "[" << name_ << "] Watchdog: Reset timed out!" << std::endl;
+				}
+				
 				stuck_count = 0;
 			}
 		} else {
@@ -142,12 +180,6 @@ bool IR_CaptureThread::initialize_spi() {
 		return false;
 	}
     
-	// Read back the mode to verify
-	uint8_t mode_check = 0;
-	if (ioctl(spi_fd_, SPI_IOC_RD_MODE, &mode_check) >= 0) {
-		std::cout << "[" << name_ << "] SPI Mode: 0x" << std::hex << (int)mode_check << std::dec << std::endl;
-	}
-    
 	// Set bits per word (8 bits)
 	uint8_t bits_per_word = 8;
 	if (ioctl(spi_fd_, SPI_IOC_WR_BITS_PER_WORD, &bits_per_word) < 0) {
@@ -164,21 +196,11 @@ bool IR_CaptureThread::initialize_spi() {
 		return false;
 	}
     
-	// Read back actual speed to verify (hardware may limit it)
-	uint32_t actual_speed = 0;
-	if (ioctl(spi_fd_, SPI_IOC_RD_MAX_SPEED_HZ, &actual_speed) >= 0) {
-		std::cout << "[" << name_ << "] SPI initialized: " << config_.spi_device 
-				  << " @ " << spi_speed << " Hz (requested), " 
-				  << actual_speed << " Hz (actual)" << std::endl;
-	} else {
-		std::cout << "[" << name_ << "] SPI initialized: " << config_.spi_device 
-				  << " @ " << spi_speed << " Hz" << std::endl;
-	}
-    
 	return true;
 }
 
 void IR_CaptureThread::cleanup_spi() {
+	std::lock_guard<std::mutex> lock(spi_mutex_);
 	if (spi_fd_ >= 0) {
 		close(spi_fd_);
 		spi_fd_ = -1;
@@ -186,14 +208,20 @@ void IR_CaptureThread::cleanup_spi() {
 }
 
 void IR_CaptureThread::run() {
-	std::cout << "[" << name_ << "] IR capture thread started" << std::endl;
-    
 	auto target_period = std::chrono::microseconds(1000000 / config_.fps);
 	auto next_frame_time = std::chrono::steady_clock::now();
     
 	while (running_.load()) {
 		auto frame_start = std::chrono::steady_clock::now();
         
+		// SAFE: Check if watchdog requested reset - perform it at this safe point
+		if (reset_requested_.load()) {
+			perform_safe_reset();
+			// Reset timing after camera reset
+			next_frame_time = std::chrono::steady_clock::now();
+			continue;
+		}
+		
 		try {
 			if (capture_vospi_frame()) {
 				auto frame = create_frame_handle();
@@ -205,6 +233,9 @@ void IR_CaptureThread::run() {
 					if (wake_handle_) {
 						wake_handle_->signal();
 					}
+				} else {
+					std::cerr << "[" << name_ << "] Warning: create_frame_handle returned null" << std::endl;
+					error_count_.fetch_add(1);
 				}
 			} else {
 				error_count_.fetch_add(1);
@@ -219,10 +250,6 @@ void IR_CaptureThread::run() {
 		auto sleep_until = std::max(next_frame_time, frame_start + std::chrono::microseconds(1000));
 		std::this_thread::sleep_until(sleep_until);
 	}
-    
-	std::cout << "[" << name_ << "] IR capture thread stopped. Frames: " 
-			  << frame_count_.load() << ", Errors: " << error_count_.load()
-			  << ", Discards: " << discard_count_.load() << std::endl;
 }
 
 bool IR_CaptureThread::capture_vospi_frame() {
@@ -243,7 +270,8 @@ bool IR_CaptureThread::capture_vospi_frame() {
 }
 
 bool IR_CaptureThread::capture_segment(int segment_id) {
-	uint8_t packet_buffer[vospi::PACKET_SIZE];
+	// Use heap-allocated buffer (moved from stack to avoid overflow in deep loops)
+	// Buffer is allocated in constructor with proper size for VoSPI packets
 	int resets = 0;
 	const int MAX_RESETS = 750; 
     
@@ -252,12 +280,12 @@ bool IR_CaptureThread::capture_segment(int segment_id) {
         
 		// Read 60 packets for this segment
 		for (int expected_line = 0; expected_line < vospi::PACKETS_PER_SEGMENT; expected_line++) {
-			if (!read_vospi_packet(packet_buffer)) {
+			if (!read_vospi_packet(packet_buffer_.data())) {
 				return false;
 			}
             
 			// Check for discard packets (camera not ready)
-			if (is_discard_packet(packet_buffer)) {
+			if (is_discard_packet(packet_buffer_.data())) {
 				discard_count_.fetch_add(1);
 				usleep(1000);
 				expected_line = -1; // Will become 0 in next iteration
@@ -271,7 +299,7 @@ bool IR_CaptureThread::capture_segment(int segment_id) {
 			}
             
 			// Get line number from packet
-			int line_number = get_packet_line_number(packet_buffer);
+			int line_number = get_packet_line_number(packet_buffer_.data());
             
 			// Validate line number is in range
 			if (line_number < 0 || line_number >= vospi::LINES_PER_SEGMENT) {
@@ -302,7 +330,7 @@ bool IR_CaptureThread::capture_segment(int segment_id) {
             
 			// Valid packet! Copy payload to buffer
 			int buffer_offset = packets_received * vospi::PAYLOAD_SIZE;
-			std::memcpy(&segment_buffer_[buffer_offset], &packet_buffer[4], vospi::PAYLOAD_SIZE);
+			std::memcpy(&segment_buffer_[buffer_offset], &packet_buffer_[4], vospi::PAYLOAD_SIZE);
             
 			packets_received++;
 			resets = 0; // Reset counter on successful packet
@@ -319,6 +347,15 @@ bool IR_CaptureThread::capture_segment(int segment_id) {
 }
 
 bool IR_CaptureThread::read_vospi_packet(uint8_t* packet_buffer) {
+	// Protect SPI operations from concurrent reset_camera() calls
+	std::lock_guard<std::mutex> lock(spi_mutex_);
+	
+	// Check if fd is valid after acquiring lock
+	if (spi_fd_ < 0) {
+		std::cerr << "[" << name_ << "] ERROR: SPI fd is invalid" << std::endl;
+		return false;
+	}
+	
 	struct spi_ioc_transfer transfer = {};
 	transfer.tx_buf = 0; // No data to send
 	transfer.rx_buf = reinterpret_cast<uintptr_t>(packet_buffer);
@@ -359,20 +396,60 @@ void IR_CaptureThread::reconstruct_frame() {
 }
 
 std::shared_ptr<IRFrameHandle> IR_CaptureThread::create_frame_handle() {
-	// Create OpenCV Mat from frame buffer
-	cv::Mat thermal_frame(vospi::FRAME_HEIGHT, vospi::FRAME_WIDTH, CV_16UC1, frame_buffer_.data());
-    
-	// Create frame handle
+	// Validate frame buffer
+	if (frame_buffer_.empty()) {
+		std::cerr << "[" << name_ << "] ERROR: Frame buffer is empty" << std::endl;
+		return nullptr;
+	}
+	
+	// Create frame handle FIRST
 	auto handle = std::make_shared<IRMatHandle>();
-	handle->keep = std::make_shared<cv::Mat>(thermal_frame.clone()); // Clone to own the data
+	
+	// Clone the frame buffer data into a NEW cv::Mat with its own memory
+	// CRITICAL: Use clone() to ensure the Mat owns its data and won't be reallocated
+	cv::Mat temp_frame(vospi::FRAME_HEIGHT, vospi::FRAME_WIDTH, CV_16UC1, frame_buffer_.data());
+	if (temp_frame.empty()) {
+		std::cerr << "[" << name_ << "] ERROR: Failed to create temporary Mat" << std::endl;
+		return nullptr;
+	}
+	
+	// Clone creates a deep copy with continuous memory that won't be reallocated
+	handle->keep = std::make_shared<cv::Mat>(temp_frame.clone());
+	
+	// Validate clone succeeded
+	if (!handle->keep || handle->keep->empty() || !handle->keep->isContinuous()) {
+		std::cerr << "[" << name_ << "] ERROR: Failed to clone frame data or data not continuous" << std::endl;
+		return nullptr;
+	}
+	
+	// CRITICAL: Verify the Mat owns its data (refcount should be exclusive)
+	if (!handle->keep->data) {
+		std::cerr << "[" << name_ << "] ERROR: Cloned Mat has no data pointer" << std::endl;
+		return nullptr;
+	}
     
-	// Setup frame metadata
+	// Setup frame metadata - IMPORTANT: Only access Mat data through shared_ptr
 	auto& owned = handle->owned;
 	owned.data = reinterpret_cast<uint16_t*>(handle->keep->data);
 	owned.width = handle->keep->cols;
 	owned.height = handle->keep->rows;
 	owned.step = static_cast<int>(handle->keep->step);
+	
+	// Final validation
+	if (!owned.data) {
+		std::cerr << "[" << name_ << "] ERROR: Frame data pointer is null" << std::endl;
+		return nullptr;
+	}
+	
+	// Sanity check: verify dimensions match expected
+	if (owned.width != vospi::FRAME_WIDTH || owned.height != vospi::FRAME_HEIGHT) {
+		std::cerr << "[" << name_ << "] ERROR: Frame dimensions mismatch! "
+		          << "Expected " << vospi::FRAME_WIDTH << "x" << vospi::FRAME_HEIGHT
+		          << ", Got " << owned.width << "x" << owned.height << std::endl;
+		return nullptr;
+	}
     
+	handle->p = &owned;
 	handle->seq = sequence_.fetch_add(1);
 	handle->ts = get_timestamp_ns();
     

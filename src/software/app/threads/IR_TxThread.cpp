@@ -1,4 +1,5 @@
 #include "threads_includes/IR_TxThread.hpp"
+#include "threads_includes/IR_CaptureThread.hpp"  // For IRMatHandle
 #include "ipc/wake_condvar.hpp" 
 #include <chrono>
 #include <sstream>
@@ -79,8 +80,6 @@ bool IR_TxThread::initialize_gstreamer() {
        
     std::string pipeline_str = ss.str();
     
-    std::cout << "[" << name_ << "] GStreamer pipeline: " << pipeline_str << std::endl;
-
     GError* error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
     if (error || !pipeline_) {
@@ -107,7 +106,6 @@ bool IR_TxThread::initialize_gstreamer() {
         return false;
     }
     
-    std::cout << "[" << name_ << "] GStreamer pipeline started successfully" << std::endl;
     return true;
 }
 
@@ -134,7 +132,35 @@ void IR_TxThread::wait_for_frame() {
 }
 
 void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle) {
-    if (!handle || !handle->p || !handle->p->data) return;
+    // Comprehensive validation
+    if (!handle) {
+        std::cerr << "[" << name_ << "] ERROR: Null frame handle" << std::endl;
+        return;
+    }
+    
+    if (!handle->p) {
+        std::cerr << "[" << name_ << "] ERROR: Null frame pointer in handle" << std::endl;
+        return;
+    }
+    
+    if (!handle->p->data) {
+        std::cerr << "[" << name_ << "] ERROR: Null data pointer in frame" << std::endl;
+        return;
+    }
+    
+    // Additional validation: check if it's an IRMatHandle and validate the cv::Mat
+    auto* mat_handle = dynamic_cast<IRMatHandle*>(handle.get());
+    if (mat_handle) {
+        if (!mat_handle->keep || mat_handle->keep->empty()) {
+            std::cerr << "[" << name_ << "] ERROR: Invalid cv::Mat in frame handle" << std::endl;
+            return;
+        }
+        
+        if (mat_handle->keep->data != reinterpret_cast<uint8_t*>(handle->p->data)) {
+            std::cerr << "[" << name_ << "] ERROR: Data pointer mismatch - possible use-after-free!" << std::endl;
+            return;
+        }
+    }
 
     // Push raw 16-bit little-endian frame directly
     const int num_pixels = gst_config_.width * gst_config_.height;
@@ -154,6 +180,23 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
         return;
     }
 
+    // Validate buffer sizes match before memcpy
+    if (map.size < buf_bytes) {
+        std::cerr << "[" << name_ << "] ERROR: GStreamer buffer too small! "
+                  << "Needed: " << buf_bytes << ", Got: " << map.size << std::endl;
+        gst_buffer_unmap(buffer, &map);
+        gst_buffer_unref(buffer);
+        return;
+    }
+
+    // Validate source pointer is accessible
+    if (!src16) {
+        std::cerr << "[" << name_ << "] ERROR: Source pointer is null before memcpy!" << std::endl;
+        gst_buffer_unmap(buffer, &map);
+        gst_buffer_unref(buffer);
+        return;
+    }
+
     std::memcpy(map.data, reinterpret_cast<const uint8_t*>(src16), buf_bytes);
     gst_buffer_unmap(buffer, &map);
 
@@ -162,15 +205,16 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
 
     GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
     if (ret != GST_FLOW_OK) {
-        std::cerr << "[" << name_ << "] WARNING: gst_app_src_push_buffer failed with code: " << ret << std::endl;
+        std::cerr << "[" << name_ << "] ERROR: gst_app_src_push_buffer failed with code: " << ret << std::endl;
+        // CRITICAL: If push fails, GStreamer does NOT take ownership, we must unref!
+        // This prevents memory leaks that accumulate and cause heap corruption
+        gst_buffer_unref(buffer);
     }
+    // Note: If ret == GST_FLOW_OK, GStreamer owns the buffer now, don't unref!
 }
 
 // 스레드 메인 루프
 void IR_TxThread::run() {
-    std::cout << "[" << name_ << "] IR TX thread started, streaming to " 
-              << gst_config_.pc_ip << ":" << gst_config_.port << std::endl;
-    
     uint64_t frames_sent = 0;
     
     while (running_.load()) {
@@ -178,20 +222,25 @@ void IR_TxThread::run() {
         if (!running_.load()) break;
 
         if (auto handle_opt = mb_.exchange(nullptr)) {
-            push_frame_to_gst(*handle_opt);
-            frames_sent++;
+            // Extract the shared_ptr from the optional to ensure strong reference
+            auto handle = *handle_opt;
             
-            // Debug: Print every 30 frames
-            if (frames_sent % 30 == 0) {
-                std::cout << "[" << name_ << "] Sent " << frames_sent << " frames" << std::endl;
+            // Validate we actually got a handle (shouldn't be null, but be defensive)
+            if (!handle) {
+                std::cerr << "[" << name_ << "] ERROR: Mailbox returned null handle!" << std::endl;
+                frame_seq_seen_ = mb_.latest_seq();
+                continue;
             }
+            
+            // Now push - handle keeps the frame alive during this call
+            push_frame_to_gst(handle);
+            frames_sent++;
+            // handle goes out of scope here, shared_ptr decrements refcount
         }
         
         // Always update frame_seq_seen_ like EO_TxThread
         frame_seq_seen_ = mb_.latest_seq();
     }
-    
-    std::cout << "[" << name_ << "] IR TX thread stopped, total frames sent: " << frames_sent << std::endl;
 }
 
 } // namespace flir

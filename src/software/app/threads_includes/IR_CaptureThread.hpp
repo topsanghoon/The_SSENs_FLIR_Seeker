@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 #include <chrono>
+#include <mutex>
+#include <condition_variable>
 
 #include <opencv2/core.hpp>
 #include "components/includes/IR_Frame.hpp"
@@ -87,10 +89,18 @@ private:
     
     // SPI interface
     int spi_fd_;
+    std::mutex spi_mutex_;  // Protects SPI operations from concurrent access
+    
+    // Safe reset mechanism
+    std::atomic<bool> reset_requested_{false};
+    std::mutex reset_mutex_;
+    std::condition_variable reset_cv_;
+    void perform_safe_reset();  // Only called by capture thread at safe points
     
     // VoSPI buffers
     std::vector<uint8_t> segment_buffer_;      // Buffer for segment data
     std::vector<uint16_t> frame_buffer_;       // Buffer for reconstructed frame
+    std::vector<uint8_t> packet_buffer_;       // Heap-allocated packet buffer (moved from stack to prevent overflow)
     
     // Statistics
     std::atomic<uint64_t> frame_count_{0};
