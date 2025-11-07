@@ -10,7 +10,9 @@
 // ★ 공용 로거
 #include "util/common_log.hpp"
 
+//transfer for read IR capture
 struct spi_ioc_transfer transfer;
+//buffer for IR capture
 uint8_t packet_buffer[flir::vospi::PACKET_SIZE];
 
 namespace flir {
