@@ -55,7 +55,6 @@ void IR_TrackThread::join() {
 프레임이 와야 한 스텝이 진행된다.
 */
 void IR_TrackThread::onFrameArrived(std::shared_ptr<IRFrameHandle> h) {
-    
     ir_mb_.push(std::move(h));
     cv_.notify_one();
 }
@@ -120,7 +119,6 @@ void IR_TrackThread::handle_click(const UserCmd& cmd) {
 }
 
 void IR_TrackThread::on_frame(IRFrameHandle& h) {
-
     // 1) 프리프로세싱
     cv::Mat pf32;
     double pre_ms = 0.0;
@@ -214,24 +212,24 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
     }
 }
 
-bool IR_TrackThread::try_init(const cv::Mat& pf, const cv::Rect2f& box) {
+inline bool IR_TrackThread::try_init(const cv::Mat& pf, const cv::Rect2f& box) {
     return tracker_.init(pf, box);
 }
-bool IR_TrackThread::try_update(const cv::Mat& pf, cv::Rect2f& out_box, float& score) {
+inline bool IR_TrackThread::try_update(const cv::Mat& pf, cv::Rect2f& out_box, float& score) {
     return tracker_.update(pf, out_box, score);
 }
 
 // ==== EventBus 발행 ====
-void IR_TrackThread::emit_init(const cv::Rect2f& b, uint64_t ts) {
+inline void IR_TrackThread::emit_init(const cv::Rect2f& b, uint64_t ts) {
     bus_.push(Event{ EventType::Init,  InitEvent{ b, ts, ir_mb_seq_seen_ } }, Topic::Tracking);
 }
-void IR_TrackThread::emit_track(const cv::Rect2f& b, float score, uint64_t ts) {
+inline void IR_TrackThread::emit_track(const cv::Rect2f& b, float score, uint64_t ts) {
     bus_.push(Event{ EventType::Track, TrackEvent{ b, score, ts, ir_mb_seq_seen_ } }, Topic::Tracking);
 }
-void IR_TrackThread::emit_lost(const cv::Rect2f& last, uint64_t ts) {
+inline void IR_TrackThread::emit_lost(const cv::Rect2f& last, uint64_t ts) {
     bus_.push(Event{ EventType::Lost,  LostEvent{ last, ts, ir_mb_seq_seen_ } }, Topic::Tracking);
 }
-void IR_TrackThread::emit_need_reselect() {
+inline void IR_TrackThread::emit_need_reselect() {
     bus_.push(Event{ EventType::NeedReselect, NeedReselectEvent{} }, Topic::Tracking);
 }
 

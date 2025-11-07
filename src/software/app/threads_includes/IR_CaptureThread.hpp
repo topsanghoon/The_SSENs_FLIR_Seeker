@@ -12,6 +12,7 @@
 #include "ipc/mailbox.hpp"
 #include "ipc/wake.hpp"
 #include "guidance_mode.hpp"
+#include <linux/spi/spidev.h>
 
 namespace flir {
 
@@ -104,12 +105,12 @@ private:
 
     bool capture_vospi_frame();
     bool capture_segment(int segment_id);
-    bool read_vospi_packet(uint8_t* packet_buffer);
+    bool read_vospi_packet();
     void reconstruct_frame();
 
-    bool is_sync_packet(const uint8_t* packet);
-    bool is_discard_packet(const uint8_t* packet);
-    int  get_packet_line_number(const uint8_t* packet);
+    bool is_sync_packet();
+    bool is_discard_packet();
+    int  get_packet_line_number();
 
     std::shared_ptr<IRFrameHandle> create_frame_handle();
     uint64_t get_timestamp_ns();

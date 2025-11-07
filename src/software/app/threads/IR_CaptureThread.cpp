@@ -5,11 +5,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <linux/spi/spidev.h>
 #include <iostream>
 
 // ★ 공용 로거
 #include "util/common_log.hpp"
+
+struct spi_ioc_transfer transfer;
+uint8_t packet_buffer[flir::vospi::PACKET_SIZE];
 
 namespace flir {
 
@@ -84,6 +86,14 @@ void IR_CaptureThread::start() {
     running_.store(true);
     watchdog_running_.store(true);
     watchdog_thread_ = std::thread(&IR_CaptureThread::watchdog_run, this);
+
+    transfer.tx_buf = 0;
+    transfer.rx_buf = reinterpret_cast<uintptr_t>(packet_buffer);
+    transfer.len = vospi::PACKET_SIZE;
+    transfer.speed_hz = config_.spi_speed;
+    transfer.bits_per_word = 8;
+    transfer.cs_change = 1;
+    transfer.delay_usecs = static_cast<__u16>(config_.spi_delay_usecs);
 
     th_ = std::thread(&IR_CaptureThread::run, this);
 }
@@ -248,7 +258,6 @@ bool IR_CaptureThread::capture_vospi_frame() {
 }
 
 bool IR_CaptureThread::capture_segment(int) {
-    uint8_t packet_buffer[vospi::PACKET_SIZE];
     int resets = 0;
     const int MAX_RESETS = 750;
 
@@ -256,11 +265,11 @@ bool IR_CaptureThread::capture_segment(int) {
         int packets_received = 0;
 
         for (int expected_line = 0; expected_line < vospi::PACKETS_PER_SEGMENT; expected_line++) {
-            if (!read_vospi_packet(packet_buffer)) {
+            if (!read_vospi_packet()) {
                 return false;
             }
 
-            if (is_discard_packet(packet_buffer)) {
+            if (is_discard_packet()) {
                 discard_count_.fetch_add(1);
                 usleep(1000);
                 expected_line = -1;
@@ -271,7 +280,7 @@ bool IR_CaptureThread::capture_segment(int) {
                 continue;
             }
 
-            int line_number = get_packet_line_number(packet_buffer);
+            int line_number = get_packet_line_number();
             if (line_number < 0 || line_number >= vospi::LINES_PER_SEGMENT) {
                 expected_line = -1;
                 usleep(1000);
@@ -303,16 +312,7 @@ bool IR_CaptureThread::capture_segment(int) {
     return false;
 }
 
-bool IR_CaptureThread::read_vospi_packet(uint8_t* packet_buffer) {
-    struct spi_ioc_transfer transfer = {};
-    transfer.tx_buf = 0;
-    transfer.rx_buf = reinterpret_cast<uintptr_t>(packet_buffer);
-    transfer.len = vospi::PACKET_SIZE;
-    transfer.speed_hz = config_.spi_speed;
-    transfer.bits_per_word = 8;
-    transfer.cs_change = 1;
-    transfer.delay_usecs = static_cast<__u16>(config_.spi_delay_usecs);
-
+inline bool IR_CaptureThread::read_vospi_packet() {
     int result = ioctl(spi_fd_, SPI_IOC_MESSAGE(1), &transfer);
     return result >= 0;
 }
@@ -351,16 +351,16 @@ std::shared_ptr<IRFrameHandle> IR_CaptureThread::create_frame_handle() {
     return handle;
 }
 
-bool IR_CaptureThread::is_sync_packet(const uint8_t* packet) {
-    return (packet[0] == 0x00) && (packet[1] == 0x00);
+inline bool IR_CaptureThread::is_sync_packet() {
+    return (packet_buffer[0] == 0x00) && (packet_buffer[1] == 0x00);
 }
 
-bool IR_CaptureThread::is_discard_packet(const uint8_t* packet) {
-    return ((packet[0] & 0x0F) == 0x0F);
+inline bool IR_CaptureThread::is_discard_packet() {
+    return ((packet_buffer[0] & 0x0F) == 0x0F);
 }
 
-int IR_CaptureThread::get_packet_line_number(const uint8_t* packet) {
-    return static_cast<int>(packet[1]);
+inline int IR_CaptureThread::get_packet_line_number() {
+    return static_cast<int>(packet_buffer[1]);
 }
 
 uint64_t IR_CaptureThread::get_timestamp_ns() {

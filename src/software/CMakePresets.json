@@ -31,7 +31,7 @@
       "name": "zynq-release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/zynq-release",
-      "toolchainFile": "/home/user/petalinux-sdk/sysroots/x86_64-petalinux-linux/usr/share/cmake/OEToolchainConfig.cmake",
+      "toolchainFile": "/opt/petalinux/2022.1/sysroots/x86_64-petalinux-linux/usr/share/cmake/OEToolchainConfig.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_EO": "ON",
@@ -47,7 +47,7 @@
       "name": "zynq-debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/zynq-debug",
-      "toolchainFile": "/home/user/petalinux-sdk/sysroots/x86_64-petalinux-linux/usr/share/cmake/OEToolchainConfig.cmake",
+      "toolchainFile": "/opt/petalinux/2022.1/sysroots/x86_64-petalinux-linux/usr/share/cmake/OEToolchainConfig.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_EO": "ON"      
