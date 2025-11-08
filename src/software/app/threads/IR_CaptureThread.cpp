@@ -305,7 +305,7 @@ bool IR_CaptureThread::capture_segment(int seg_id){
         // 0xFxxx (discard/텔레메트리) → 완전 스킵 (카운트/expected 불변)
         if (is_discard_packet(packet_buffer_.data())) {
             discard_count_.fetch_add(1);
-            ::usleep(1000);
+            ::usleep(100);
             if (++resets >= MAX_RESETS) {
                 LOGW(TAG, "Too many discards (>=750) → safe reset");
                 perform_safe_reset();
@@ -319,7 +319,7 @@ bool IR_CaptureThread::capture_segment(int seg_id){
 
         // 텔레메트리 라인(예: line==60) → 완전 스킵
         if (line >= vospi::LINES_PER_SEGMENT) {
-            ::usleep(1000);
+            ::usleep(50);
             if (++resets >= MAX_RESETS) {
                 LOGW(TAG, "Too many telemetry skips (>=750) → safe reset");
                 perform_safe_reset();
@@ -332,7 +332,7 @@ bool IR_CaptureThread::capture_segment(int seg_id){
         if (line < 0 || line != expected_line) {
             expected_line = 0;
             packets = 0;
-            ::usleep(1000);
+            ::usleep(500);
             if (++resets >= MAX_RESETS) {
                 LOGW(TAG, "Too many resyncs (>=750) → safe reset");
                 perform_safe_reset();
