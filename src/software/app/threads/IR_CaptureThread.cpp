@@ -285,6 +285,13 @@ bool IR_CaptureThread::capture_segment(int /*seg_id*/){
         int packets = 0;
 
         for (int expected_line=0; expected_line<vospi::PACKETS_PER_SEGMENT; ++expected_line){
+            // Critical: Validate packet buffer before SPI operation
+            if (packet_buffer_.size() < vospi::PACKET_SIZE) {
+                LOGE(TAG, "CRITICAL: packet buffer too small! size=%zu, need=%d", 
+                     packet_buffer_.size(), vospi::PACKET_SIZE);
+                return false;
+            }
+            
             if (!read_vospi_packet(packet_buffer_.data())) return false;
 
             if (is_discard_packet(packet_buffer_.data())){
@@ -311,6 +318,19 @@ bool IR_CaptureThread::capture_segment(int /*seg_id*/){
             }
 
             const int off = packets * vospi::PAYLOAD_SIZE;
+            
+            // Critical bounds check for segment buffer memcpy
+            if (off + vospi::PAYLOAD_SIZE > static_cast<int>(segment_buffer_.size())) {
+                LOGE(TAG, "CRITICAL: segment buffer memcpy overflow! off=%d, payload=%d, size=%zu", 
+                     off, vospi::PAYLOAD_SIZE, segment_buffer_.size());
+                return false;
+            }
+            if (packet_buffer_.size() < 4 + vospi::PAYLOAD_SIZE) {
+                LOGE(TAG, "CRITICAL: packet buffer underflow! size=%zu, need=%d", 
+                     packet_buffer_.size(), 4 + vospi::PAYLOAD_SIZE);
+                return false;
+            }
+            
             std::memcpy(&segment_buffer_[off], &packet_buffer_[4], vospi::PAYLOAD_SIZE);
             ++packets;
             resets = 0;
@@ -328,6 +348,11 @@ bool IR_CaptureThread::read_vospi_packet(uint8_t* pkt){
         LOGE(TAG, "SPI fd invalid"); 
         return false; 
     }
+    
+    if (!pkt) {
+        LOGE(TAG, "CRITICAL: NULL packet buffer passed to read_vospi_packet");
+        return false;
+    }
 
     struct spi_ioc_transfer tr{};
     tr.tx_buf = 0;
@@ -339,7 +364,11 @@ bool IR_CaptureThread::read_vospi_packet(uint8_t* pkt){
     tr.delay_usecs = static_cast<__u16>(config_.spi_delay_usecs);
 
     int r = ::ioctl(spi_fd_, SPI_IOC_MESSAGE(1), &tr);
-    return r >= 0;
+    if (r < 0) {
+        LOGE(TAG, "SPI ioctl failed: errno=%d", errno);
+        return false;
+    }
+    return true;
 }
 
 void IR_CaptureThread::reconstruct_frame(){
@@ -350,6 +379,19 @@ void IR_CaptureThread::reconstruct_frame(){
             for (int px=0; px<vospi::PIXELS_PER_LINE; ++px){
                 const int frame_idx = frame_line*vospi::FRAME_WIDTH + px;
                 const int seg_idx   = seg_off + (px*2);
+                
+                // Critical bounds check to prevent buffer overflow
+                if (seg_idx + 1 >= static_cast<int>(segment_buffer_.size())) {
+                    LOGE(TAG, "CRITICAL: segment buffer overflow! seg_idx=%d+1, size=%zu, seg=%d, line=%d, px=%d", 
+                         seg_idx, segment_buffer_.size(), seg, line, px);
+                    return;
+                }
+                if (frame_idx >= static_cast<int>(frame_buffer_.size())) {
+                    LOGE(TAG, "CRITICAL: frame buffer overflow! frame_idx=%d, size=%zu, frame_line=%d, px=%d", 
+                         frame_idx, frame_buffer_.size(), frame_line, px);
+                    return;
+                }
+                
                 const uint16_t v = (static_cast<uint16_t>(segment_buffer_[seg_idx])<<8)
                                  | static_cast<uint16_t>(segment_buffer_[seg_idx+1]);
                 frame_buffer_[frame_idx] = v;

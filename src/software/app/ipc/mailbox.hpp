@@ -67,8 +67,11 @@ private:
 
     template <typename U>
     void emplace_impl(U&& item) {
-        const size_t w = write_idx_.load(std::memory_order_relaxed);
+        const size_t w = write_idx_.load(std::memory_order_acquire);
         const size_t r = read_idx_.load(std::memory_order_acquire);
+
+        // Extract sequence BEFORE storing to avoid race
+        uint32_t s = extract_seq_(item);
 
         // ring에 쓰기
         buf_[w % cap_] = std::forward<U>(item);
@@ -82,8 +85,6 @@ private:
         write_idx_.store(new_w, std::memory_order_release);
 
         // latest_seq_ 갱신 (항목 seq 또는 내부 seq)
-        // (주의) 항목에 seq가 없을 때도 “증가” 보장
-        uint32_t s = extract_seq_(buf_[(new_w - 1) % cap_]);
         latest_seq_.store(s, std::memory_order_release);
     }
 
