@@ -86,12 +86,11 @@ void IR_CaptureThread::perform_safe_reset(){
     reset_cv_.notify_one();
 }
 
+// ★ 논블로킹 버전 (A안)
 void IR_CaptureThread::reset_camera(){
     reset_requested_.store(true);
-    std::unique_lock<std::mutex> lock(reset_mutex_);
-    reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
-        return !reset_requested_.load();
-    });
+    reset_cv_.notify_all();            // 대기 중인 쪽이 있으면 즉시 깨움
+    LOGW(TAG, "IR reset requested (non-blocking).");
 }
 
 // -------------------- Start/Stop/Join --------------------
