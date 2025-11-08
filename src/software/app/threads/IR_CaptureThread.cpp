@@ -33,7 +33,7 @@ IR_CaptureThread::IR_CaptureThread(
     , spi_fd_(-1)
     , segment_buffer_(vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE)
     , frame_buffer_(vospi::FRAME_WIDTH * vospi::FRAME_HEIGHT)
-    , packet_buffer_(vospi::PACKET_SIZE) // ★ 힙 버퍼
+    , packet_buffer_(vospi::PACKET_SIZE)
 {}
 
 IR_CaptureThread::~IR_CaptureThread(){
@@ -42,52 +42,34 @@ IR_CaptureThread::~IR_CaptureThread(){
     cleanup_spi();
 }
 
-// -------------------- Reset (안전 지점에서만 수행) --------------------
+// -------------------- Reset (safe point only) --------------------
 
 void IR_CaptureThread::perform_safe_reset(){
-    LOGW(TAG, "Resetting camera (safe)...");
-    
     std::lock_guard<std::mutex> lock(spi_mutex_);
     
     if (spi_fd_ >= 0) {
-        close(spi_fd_);
+        ::close(spi_fd_);
         spi_fd_ = -1;
     }
 
-    // I2C reboot (Lepton: /dev/i2c-0, 0x2a)
+    // I2C reboot
     int i2c_fd = ::open("/dev/i2c-0", O_RDWR);
     if (i2c_fd >= 0) {
-        if (::ioctl(i2c_fd, 0x0703, 0x2a) >= 0) { // I2C_SLAVE
+        if (::ioctl(i2c_fd, 0x0703, 0x2a) >= 0) {
             uint8_t reboot_cmd[4] = {0x08, 0x02, 0x00, 0x00};
             if (::write(i2c_fd, reboot_cmd, 4) == 4) {
-                ::usleep(750000); // 750ms
-            } else {
-                LOGE(TAG, "I2C reboot write failed");
+                ::usleep(750000);
             }
-        } else {
-            LOGE(TAG, "I2C_SLAVE set failed");
         }
         ::close(i2c_fd);
-    } else {
-        LOGE(TAG, "open(/dev/i2c-0) failed");
     }
 
     reset_requested_.store(false);
-
-    if (!initialize_spi()) {
-        LOGE(TAG, "Failed to reinitialize SPI after reset");
-    }
-    
-    reset_cv_.notify_one();
+    initialize_spi();
 }
 
-// 외부 호출용(캡처 스레드에서 안전 지점에 도달하면 실제 reset 수행)
 void IR_CaptureThread::reset_camera(){
     reset_requested_.store(true);
-    std::unique_lock<std::mutex> lock(reset_mutex_);
-    reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
-        return !reset_requested_.load();
-    });
 }
 
 // -------------------- Start/Stop/Join --------------------
@@ -95,25 +77,19 @@ void IR_CaptureThread::reset_camera(){
 void IR_CaptureThread::start(){
     if (th_.joinable()) return;
 
-    {
-        std::lock_guard<std::mutex> lock(spi_mutex_);
-        if (!initialize_spi()) {
-            LOGE(TAG, "SPI init failed");
-            throw std::runtime_error("IR_CaptureThread failed to initialize SPI");
-        }
+    if (!initialize_spi()) {
+        throw std::runtime_error("SPI init failed");
     }
 
     running_.store(true);
     watchdog_running_.store(true);
     watchdog_thread_ = std::thread(&IR_CaptureThread::watchdog_run, this);
-
     th_ = std::thread(&IR_CaptureThread::run, this);
 }
 
 void IR_CaptureThread::stop(){
     running_.store(false);
     watchdog_running_.store(false);
-    reset_cv_.notify_all();
 }
 
 void IR_CaptureThread::join(){
@@ -125,27 +101,14 @@ void IR_CaptureThread::join(){
 
 void IR_CaptureThread::watchdog_run(){
     uint64_t last = 0;
-    int stuck_count = 0;
-
+    
     while (watchdog_running_.load()){
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         if (!running_.load()) continue;
-
+        
         uint64_t cur = frame_count_.load();
         if (cur == last && cur > 0){
-            if (++stuck_count >= 3){  // 6 seconds of no frames
-                LOGW(TAG, "No new frames ~6s → request reset");
-                reset_requested_.store(true);
-                
-                std::unique_lock<std::mutex> lock(reset_mutex_);
-                reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
-                    return !reset_requested_.load();
-                });
-                
-                stuck_count = 0;
-            }
-        } else {
-            stuck_count = 0;
+            reset_requested_.store(true);
         }
         last = cur;
     }
@@ -154,115 +117,62 @@ void IR_CaptureThread::watchdog_run(){
 // -------------------- SPI I/O --------------------
 
 bool IR_CaptureThread::initialize_spi() {
-    // 이전 fd 정리
     if (spi_fd_ >= 0) {
         ::close(spi_fd_);
         spi_fd_ = -1;
     }
 
-    // 우선 로컬 fd로 열고, 모든 설정 성공 시에만 spi_fd_에 반영
     int fd = ::open(config_.spi_device.c_str(), O_RDWR);
-    if (fd < 0) {
-        LOGE(TAG, "open SPI %s failed", config_.spi_device.c_str());
-        return false;
-    }
+    if (fd < 0) return false;
 
-    uint8_t mode = SPI_MODE_3;  // CPOL=1, CPHA=1
-    uint8_t bpw  = 8;
+    uint8_t mode = SPI_MODE_3;
+    uint8_t bpw = 8;
     uint32_t spd = config_.spi_speed;
 
-    // 설정 단계들: 하나라도 실패하면 정리 후 false
-    if (::ioctl(fd, SPI_IOC_WR_MODE, &mode) < 0) {
-        LOGE(TAG, "SPI mode set fail");
-        ::close(fd);
-        return false;
-    }
-    if (::ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bpw) < 0) {
-        LOGE(TAG, "SPI bpw set fail");
-        ::close(fd);
-        return false;
-    }
-    if (::ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &spd) < 0) {
-        LOGE(TAG, "SPI speed set fail");
+    if (::ioctl(fd, SPI_IOC_WR_MODE, &mode) < 0 ||
+        ::ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bpw) < 0 ||
+        ::ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &spd) < 0) {
         ::close(fd);
         return false;
     }
 
-    // 여기까지 성공했으면 클래스 멤버에 반영
     spi_fd_ = fd;
-
-    // 실제 속도 읽어 로그
-    uint32_t actual = 0;
-    if (::ioctl(spi_fd_, SPI_IOC_RD_MAX_SPEED_HZ, &actual) >= 0) {
-        LOGI(TAG, "SPI ok: req=%uHz act=%uHz",
-             (unsigned)config_.spi_speed, (unsigned)actual);
-    } else {
-        LOGI(TAG, "SPI ok: req=%uHz", (unsigned)config_.spi_speed);
-    }
-
     return true;
 }
 
-
 void IR_CaptureThread::cleanup_spi(){
-    std::lock_guard<std::mutex> lk(spi_mutex_);
-    if (spi_fd_ >= 0) { ::close(spi_fd_); spi_fd_ = -1; }
+    if (spi_fd_ >= 0) { 
+        ::close(spi_fd_); 
+        spi_fd_ = -1; 
+    }
 }
 
 // -------------------- Main loop --------------------
 
 void IR_CaptureThread::run(){
-    LOGI(TAG, "IR capture thread started.");
-
     auto period = std::chrono::microseconds(1'000'000 / std::max(1, config_.fps));
     auto next_t = std::chrono::steady_clock::now();
-
-    auto log_t0 = std::chrono::steady_clock::now();
-    uint64_t last_f=0, last_e=0, last_d=0;
 
     while (running_.load()){
         auto frame_t0 = std::chrono::steady_clock::now();
 
-        // 안전 지점에서만 reset 수행
         if (reset_requested_.load()){
             perform_safe_reset();
             next_t = std::chrono::steady_clock::now();
             continue;
         }
 
-        try{
-            if (capture_vospi_frame()){
-                auto h = create_frame_handle();
-                if (h){
-                    push_frame_routed_(h);       // ★ 기존 흐름 유지 (TX → (Terminal이면) Track)
-                    frame_count_.fetch_add(1);
-                } else {
-                    error_count_.fetch_add(1);
-                }
-            } else {
-                error_count_.fetch_add(1);
+        if (capture_vospi_frame()){
+            auto h = create_frame_handle();
+            if (h){
+                push_frame_routed_(h);
+                frame_count_.fetch_add(1);
             }
-        } catch(const std::exception& e){
-            LOGE(TAG, "Capture exception: %s", e.what());
-            error_count_.fetch_add(1);
-        }
-
-        // 1초 주기 통계
-        auto now = std::chrono::steady_clock::now();
-        if (now - log_t0 >= std::chrono::seconds(1)){
-            uint64_t f = frame_count_.load(), e = error_count_.load(), d = discard_count_.load();
-            LOGI(TAG, "IR stats: fps=%llu err+=%llu disc+=%llu (total f=%llu e=%llu d=%llu)",
-                 (unsigned long long)(f-last_f), (unsigned long long)(e-last_e), (unsigned long long)(d-last_d),
-                 (unsigned long long)f, (unsigned long long)e, (unsigned long long)d);
-            last_f=f; last_e=e; last_d=d; log_t0=now;
         }
 
         next_t += period;
-        auto sleep_until = std::max(next_t, frame_t0 + std::chrono::microseconds(1000));
-        std::this_thread::sleep_until(sleep_until);
+        std::this_thread::sleep_until(std::max(next_t, frame_t0 + std::chrono::microseconds(1000)));
     }
-
-    LOGI(TAG, "IR capture thread stopped.");
 }
 
 // -------------------- VoSPI --------------------
@@ -277,86 +187,50 @@ bool IR_CaptureThread::capture_vospi_frame(){
     return true;
 }
 
-bool IR_CaptureThread::capture_segment(int /*seg_id*/){
+bool IR_CaptureThread::capture_segment(int seg_id){
+    const int seg_base = seg_id * (vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE);
+    int expected_line = 0;
+    int packets = 0;
     int resets = 0;
-    const int MAX_RESETS = 750;
 
-    while (running_.load()){
-        // Robust packet collection: accept out-of-order packets and place them by line index.
-        // This prevents distortion when packets arrive duplicated or slightly out-of-order.
-        std::vector<char> seen(vospi::LINES_PER_SEGMENT, 0);
-        int unique_lines = 0;
+    while (running_.load() && packets < vospi::PACKETS_PER_SEGMENT) {
+        if (!read_vospi_packet(packet_buffer_.data())) return false;
 
-        for (int try_idx = 0; try_idx < vospi::PACKETS_PER_SEGMENT && running_.load(); ++try_idx) {
-            // Validate packet buffer before SPI operation
-            if (packet_buffer_.size() < vospi::PACKET_SIZE) {
-                LOGE(TAG, "CRITICAL: packet buffer too small! size=%zu, need=%d", 
-                     packet_buffer_.size(), vospi::PACKET_SIZE);
-                return false;
-            }
-
-            if (!read_vospi_packet(packet_buffer_.data())) return false;
-
-            if (is_discard_packet(packet_buffer_.data())){
-                discard_count_.fetch_add(1);
-                ::usleep(1000);
-                if (++resets >= MAX_RESETS){ std::this_thread::sleep_for(std::chrono::milliseconds(185)); resets=0; }
-                // continue to next packet; do not reset try_idx here so we keep limited attempts
-                continue;
-            }
-
-            int line = get_packet_line_number(packet_buffer_.data());
-            if (line < 0 || line >= vospi::LINES_PER_SEGMENT){
-                ::usleep(1000);
-                if (++resets >= MAX_RESETS){ std::this_thread::sleep_for(std::chrono::milliseconds(185)); resets=0; }
-                continue;
-            }
-
-            // If we've already seen this line, ignore duplicate
-            if (seen[line]) {
-                // duplicate packet for the same line — ignore
-                continue;
-            }
-
-            // Bounds and packet sanity checks
-            const int off = line * vospi::PAYLOAD_SIZE;
-            if (off + vospi::PAYLOAD_SIZE > static_cast<int>(segment_buffer_.size())) {
-                LOGE(TAG, "CRITICAL: segment buffer memcpy overflow! line=%d off=%d payload=%d size=%zu",
-                     line, off, vospi::PAYLOAD_SIZE, segment_buffer_.size());
-                return false;
-            }
-            if (packet_buffer_.size() < 4 + vospi::PAYLOAD_SIZE) {
-                LOGE(TAG, "CRITICAL: packet buffer underflow! size=%zu, need=%d", 
-                     packet_buffer_.size(), 4 + vospi::PAYLOAD_SIZE);
-                return false;
-            }
-
-            std::memcpy(&segment_buffer_[off], &packet_buffer_[4], vospi::PAYLOAD_SIZE);
-            seen[line] = 1;
-            ++unique_lines;
-            resets = 0;
-
-            if (unique_lines >= vospi::LINES_PER_SEGMENT) break; // got all lines for this segment
+        if (is_discard_packet(packet_buffer_.data())) {
+            ::usleep(1000);
+            if (++resets > 750) perform_safe_reset();
+            continue;
         }
 
-        // Success only if we collected all expected lines
-        if (unique_lines >= vospi::LINES_PER_SEGMENT) return true;
+        const int line = get_packet_line_number(packet_buffer_.data());
+
+        if (line >= vospi::LINES_PER_SEGMENT) {
+            ::usleep(1000);
+            continue;
+        }
+
+        if (line != expected_line) {
+            expected_line = 0;
+            packets = 0;
+            ::usleep(1000);
+            continue;
+        }
+
+        const int off = seg_base + packets * vospi::PAYLOAD_SIZE;
+        std::memcpy(&segment_buffer_[off], &packet_buffer_[4], vospi::PAYLOAD_SIZE);
+
+        ++packets;
+        ++expected_line;
+        resets = 0;
     }
-    return false;
+
+    return (packets == vospi::PACKETS_PER_SEGMENT);
 }
 
 bool IR_CaptureThread::read_vospi_packet(uint8_t* pkt){
     std::lock_guard<std::mutex> lock(spi_mutex_);
-    
-    if (spi_fd_ < 0){ 
-        LOGE(TAG, "SPI fd invalid"); 
-        return false; 
-    }
-    
-    if (!pkt) {
-        LOGE(TAG, "CRITICAL: NULL packet buffer passed to read_vospi_packet");
-        return false;
-    }
+
+    if (spi_fd_ < 0) return false;
 
     struct spi_ioc_transfer tr{};
     tr.tx_buf = 0;
@@ -367,12 +241,7 @@ bool IR_CaptureThread::read_vospi_packet(uint8_t* pkt){
     tr.cs_change = 1;
     tr.delay_usecs = static_cast<__u16>(config_.spi_delay_usecs);
 
-    int r = ::ioctl(spi_fd_, SPI_IOC_MESSAGE(1), &tr);
-    if (r < 0) {
-        LOGE(TAG, "SPI ioctl failed: errno=%d", errno);
-        return false;
-    }
-    return true;
+    return ::ioctl(spi_fd_, SPI_IOC_MESSAGE(1), &tr) >= 0;
 }
 
 void IR_CaptureThread::reconstruct_frame(){
@@ -382,19 +251,7 @@ void IR_CaptureThread::reconstruct_frame(){
             const int seg_off = (seg*vospi::PACKETS_PER_SEGMENT*vospi::PAYLOAD_SIZE) + (line*vospi::PAYLOAD_SIZE);
             for (int px=0; px<vospi::PIXELS_PER_LINE; ++px){
                 const int frame_idx = frame_line*vospi::FRAME_WIDTH + px;
-                const int seg_idx   = seg_off + (px*2);
-                
-                // Critical bounds check to prevent buffer overflow
-                if (seg_idx + 1 >= static_cast<int>(segment_buffer_.size())) {
-                    LOGE(TAG, "CRITICAL: segment buffer overflow! seg_idx=%d+1, size=%zu, seg=%d, line=%d, px=%d", 
-                         seg_idx, segment_buffer_.size(), seg, line, px);
-                    return;
-                }
-                if (frame_idx >= static_cast<int>(frame_buffer_.size())) {
-                    LOGE(TAG, "CRITICAL: frame buffer overflow! frame_idx=%d, size=%zu, frame_line=%d, px=%d", 
-                         frame_idx, frame_buffer_.size(), frame_line, px);
-                    return;
-                }
+                const int seg_idx = seg_off + (px*2);
                 
                 const uint16_t v = (static_cast<uint16_t>(segment_buffer_[seg_idx])<<8)
                                  | static_cast<uint16_t>(segment_buffer_[seg_idx+1]);
@@ -407,40 +264,21 @@ void IR_CaptureThread::reconstruct_frame(){
 // -------------------- Frame handle & routing --------------------
 
 std::shared_ptr<IRFrameHandle> IR_CaptureThread::create_frame_handle(){
-    if (frame_buffer_.empty()) {
-        return nullptr;
-    }
+    if (frame_buffer_.empty()) return nullptr;
     
     auto handle = std::make_shared<IRMatHandle>();
     
     cv::Mat temp_frame(vospi::FRAME_HEIGHT, vospi::FRAME_WIDTH, CV_16UC1, frame_buffer_.data());
-    if (temp_frame.empty()) {
-        return nullptr;
-    }
+    if (temp_frame.empty()) return nullptr;
     
     handle->keep = std::make_shared<cv::Mat>(temp_frame.clone());
-    
-    if (!handle->keep || handle->keep->empty() || !handle->keep->isContinuous()) {
-        return nullptr;
-    }
-    
-    if (!handle->keep->data) {
-        return nullptr;
-    }
+    if (!handle->keep || handle->keep->empty()) return nullptr;
     
     auto& owned = handle->owned;
     owned.data = reinterpret_cast<uint16_t*>(handle->keep->data);
     owned.width = handle->keep->cols;
     owned.height = handle->keep->rows;
     owned.step = static_cast<int>(handle->keep->step);
-    
-    if (!owned.data) {
-        return nullptr;
-    }
-    
-    if (owned.width != vospi::FRAME_WIDTH || owned.height != vospi::FRAME_HEIGHT) {
-        return nullptr;
-    }
     
     handle->p = &owned;
     handle->seq = sequence_.fetch_add(1);
