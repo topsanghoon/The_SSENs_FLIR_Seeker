@@ -33,8 +33,7 @@ IR_CaptureThread::IR_CaptureThread(
     , wake_handle_(std::move(wake_handle))
     , config_(config)
     , spi_fd_(-1)
-    // Lepton 2.x 호환: 세그먼트 버퍼는 "세그먼트 1개" 크기로 시작
-    // (Lepton 3.x 를 쓸 경우 SEGMENTS_PER_FRAME 값에 맞춰 아래 capture에서 seg_base 오프셋을 합산해 씁니다.)
+    // Lepton 2.x 기본: 세그먼트 버퍼는 "세그먼트 1개" 크기
     , segment_buffer_(vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE)
     , frame_buffer_(vospi::FRAME_WIDTH * vospi::FRAME_HEIGHT)
     , packet_buffer_(vospi::PACKET_SIZE)
@@ -75,8 +74,8 @@ void IR_CaptureThread::perform_safe_reset(){
         LOGE(TAG, "open(/dev/i2c-0) failed");
     }
 
+    // SPI 재초기화
     reset_requested_.store(false);
-
     if (!initialize_spi()) {
         LOGE(TAG, "Failed to reinitialize SPI after reset");
     }
@@ -122,33 +121,30 @@ void IR_CaptureThread::join(){
     if (watchdog_thread_.joinable()) watchdog_thread_.join();
 }
 
-// -------------------- Watchdog --------------------
+// -------------------- Watchdog (1초) --------------------
+//
+// 1초마다 확인해서, 직전 1초 동안 frame_count_ 증가가 없으면 즉시 리셋 요청.
+//
 
 void IR_CaptureThread::watchdog_run(){
     uint64_t last = 0;
-    int stuck_count = 0;
 
     while (watchdog_running_.load()){
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         if (!running_.load()) continue;
 
-        uint64_t cur = frame_count_.load();
+        const uint64_t cur = frame_count_.load();
         if (cur == last && cur > 0){
-            if (++stuck_count >= 3){  // ~6s 정지 감지
-                LOGW(TAG, "No new frames ~6s → request reset");
-                reset_requested_.store(true);
+            LOGW(TAG, "Watchdog: no new frames ~1s → request reset");
+            reset_requested_.store(true);
 
-                std::unique_lock<std::mutex> lock(reset_mutex_);
-                reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
-                    return !reset_requested_.load();
-                });
-
-                stuck_count = 0;
-            }
-        } else {
-            stuck_count = 0;
+            // 리셋 완료 대기 (최대 2초)
+            std::unique_lock<std::mutex> lock(reset_mutex_);
+            reset_cv_.wait_for(lock, std::chrono::seconds(2), [this]() {
+                return !reset_requested_.load();
+            });
         }
-        last = cur;
+        last = frame_count_.load();
     }
 }
 
@@ -267,15 +263,13 @@ void IR_CaptureThread::run(){
 
 // -------------------- VoSPI (LeptonThread 스타일) --------------------
 //
-// * 핵심 포인트 *
-// - "라인 번호가 기대와 다르면" 세그먼트 처음부터 다시 (resync)
-// - "텔레메트리(line >= LINES_PER_SEGMENT)" 는 완전히 건너뛰되,
-//   유효라인(0..LINES_PER_SEGMENT-1)을 정확히 PACKETS_PER_SEGMENT개 채웠을 때만 true 리턴
-// - Lepton 3.x 대비: seg_id 오프셋(seg_base) 적용
+// - 라인 번호 불일치 시 세그먼트 재동기화
+// - 텔레메트리(line >= LINES_PER_SEGMENT)는 완전 스킵(카운트 증가 금지)
+// - 유효 라인 60개(0..59)를 채웠을 때만 세그먼트 성공
+// - resets가 750 누적되면 즉시 안전 리셋
 //
 
 bool IR_CaptureThread::capture_vospi_frame(){
-    // 프레임 전체를 구성: seg 0..N-1
     for (int seg=0; seg<vospi::SEGMENTS_PER_FRAME; ++seg){
         if (!capture_segment(seg)) return false;
         if (seg < vospi::SEGMENTS_PER_FRAME-1)
@@ -286,14 +280,14 @@ bool IR_CaptureThread::capture_vospi_frame(){
 }
 
 bool IR_CaptureThread::capture_segment(int seg_id){
-    constexpr int MAX_RESETS = 750;
+    constexpr int MAX_RESETS = 750; // LeptonThread와 동일 기준
     int resets = 0;
 
-    // Lepton 3.x 호환: 세그먼트 시작 오프셋(바이트)
+    // Lepton 3.x 대비: 세그먼트 시작 오프셋(바이트). Lepton 2.5면 SEGMENTS_PER_FRAME=1.
     const int seg_base = seg_id * (vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE);
 
-    int expected_line = 0; // 유효 라인 번호(0..59)
-    int packets = 0;       // 유효 라인 개수 카운트
+    int expected_line = 0; // 0..59
+    int packets = 0;       // 유효 라인 수
 
     while (running_.load() && packets < vospi::PACKETS_PER_SEGMENT) {
         // 패킷 버퍼 크기 보장
@@ -308,35 +302,41 @@ bool IR_CaptureThread::capture_segment(int seg_id){
             return false;
         }
 
-        // 0xFxxx (discard/텔레메트리 헤더) → 완전 스킵 (카운트/expected 변동 없음)
+        // 0xFxxx (discard/텔레메트리) → 완전 스킵 (카운트/expected 불변)
         if (is_discard_packet(packet_buffer_.data())) {
             discard_count_.fetch_add(1);
             ::usleep(1000);
             if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many discards → safe reset");
+                LOGW(TAG, "Too many discards (>=750) → safe reset");
                 perform_safe_reset();
-                resets = 0;
+                // 세그먼트 상태 초기화 후 다시 시도
+                resets = 0; expected_line = 0; packets = 0;
             }
             continue;
         }
 
         const int line = get_packet_line_number(packet_buffer_.data());
 
-        // 텔레메트리 라인(line >= LINES_PER_SEGMENT) → 완전 스킵
+        // 텔레메트리 라인(예: line==60) → 완전 스킵
         if (line >= vospi::LINES_PER_SEGMENT) {
             ::usleep(1000);
+            if (++resets >= MAX_RESETS) {
+                LOGW(TAG, "Too many telemetry skips (>=750) → safe reset");
+                perform_safe_reset();
+                resets = 0; expected_line = 0; packets = 0;
+            }
             continue;
         }
 
-        // 라인 번호가 비정상/역행/불연속 → 세그먼트 재동기
+        // 라인 불일치/비정상 → 세그먼트 재동기화
         if (line < 0 || line != expected_line) {
             expected_line = 0;
             packets = 0;
             ::usleep(1000);
             if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many resyncs → safe reset");
+                LOGW(TAG, "Too many resyncs (>=750) → safe reset");
                 perform_safe_reset();
-                resets = 0;
+                resets = 0; // 이후 처음부터 다시 채움
             }
             continue;
         }
@@ -359,7 +359,7 @@ bool IR_CaptureThread::capture_segment(int seg_id){
 
         ++packets;        // 유효 라인 누적
         ++expected_line;  // 다음 기대 라인
-        resets = 0;
+        resets = 0;       // 정상 수신했으니 누적 카운터 리셋
     }
 
     return (packets == vospi::PACKETS_PER_SEGMENT);
