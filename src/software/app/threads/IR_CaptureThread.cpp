@@ -46,9 +46,12 @@ IR_CaptureThread::~IR_CaptureThread(){
 
 void IR_CaptureThread::perform_safe_reset(){
     LOGW(TAG, "Resetting camera (safe)...");
-    {
-        std::lock_guard<std::mutex> lk(spi_mutex_);
-        if (spi_fd_ >= 0) { ::close(spi_fd_); spi_fd_ = -1; }
+    
+    std::lock_guard<std::mutex> lock(spi_mutex_);
+    
+    if (spi_fd_ >= 0) {
+        close(spi_fd_);
+        spi_fd_ = -1;
     }
 
     // I2C reboot (Lepton: /dev/i2c-0, 0x2a)
@@ -69,23 +72,22 @@ void IR_CaptureThread::perform_safe_reset(){
         LOGE(TAG, "open(/dev/i2c-0) failed");
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-    // SPI 재오픈
-    {
-        std::lock_guard<std::mutex> lk(spi_mutex_);
-        if (!initialize_spi()) LOGE(TAG, "reinitialize SPI failed after reset");
-    }
-
     reset_requested_.store(false);
+
+    if (!initialize_spi()) {
+        LOGE(TAG, "Failed to reinitialize SPI after reset");
+    }
+    
     reset_cv_.notify_one();
 }
 
 // 외부 호출용(캡처 스레드에서 안전 지점에 도달하면 실제 reset 수행)
 void IR_CaptureThread::reset_camera(){
     reset_requested_.store(true);
-    std::unique_lock<std::mutex> lk(reset_mutex_);
-    (void)reset_cv_.wait_for(lk, std::chrono::seconds(5), [this]{ return !reset_requested_.load(); });
+    std::unique_lock<std::mutex> lock(reset_mutex_);
+    reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
+        return !reset_requested_.load();
+    });
 }
 
 // -------------------- Start/Stop/Join --------------------
@@ -94,10 +96,10 @@ void IR_CaptureThread::start(){
     if (th_.joinable()) return;
 
     {
-        std::lock_guard<std::mutex> lk(spi_mutex_);
+        std::lock_guard<std::mutex> lock(spi_mutex_);
         if (!initialize_spi()) {
             LOGE(TAG, "SPI init failed");
-            throw std::runtime_error("IR_CaptureThread SPI init failed");
+            throw std::runtime_error("IR_CaptureThread failed to initialize SPI");
         }
     }
 
@@ -123,7 +125,7 @@ void IR_CaptureThread::join(){
 
 void IR_CaptureThread::watchdog_run(){
     uint64_t last = 0;
-    int stuck_sec = 0;
+    int stuck_count = 0;
 
     while (watchdog_running_.load()){
         std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -131,15 +133,19 @@ void IR_CaptureThread::watchdog_run(){
 
         uint64_t cur = frame_count_.load();
         if (cur == last && cur > 0){
-            if (++stuck_sec >= 3){ // 6s
+            if (++stuck_count >= 3){  // 6 seconds of no frames
                 LOGW(TAG, "No new frames ~6s → request reset");
                 reset_requested_.store(true);
-                std::unique_lock<std::mutex> lk(reset_mutex_);
-                (void)reset_cv_.wait_for(lk, std::chrono::seconds(5), [this]{ return !reset_requested_.load(); });
-                stuck_sec = 0;
+                
+                std::unique_lock<std::mutex> lock(reset_mutex_);
+                reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
+                    return !reset_requested_.load();
+                });
+                
+                stuck_count = 0;
             }
         } else {
-            stuck_sec = 0;
+            stuck_count = 0;
         }
         last = cur;
     }
@@ -316,8 +322,12 @@ bool IR_CaptureThread::capture_segment(int /*seg_id*/){
 }
 
 bool IR_CaptureThread::read_vospi_packet(uint8_t* pkt){
-    std::lock_guard<std::mutex> lk(spi_mutex_);
-    if (spi_fd_ < 0){ LOGE(TAG, "SPI fd invalid"); return false; }
+    std::lock_guard<std::mutex> lock(spi_mutex_);
+    
+    if (spi_fd_ < 0){ 
+        LOGE(TAG, "SPI fd invalid"); 
+        return false; 
+    }
 
     struct spi_ioc_transfer tr{};
     tr.tx_buf = 0;
@@ -351,27 +361,45 @@ void IR_CaptureThread::reconstruct_frame(){
 // -------------------- Frame handle & routing --------------------
 
 std::shared_ptr<IRFrameHandle> IR_CaptureThread::create_frame_handle(){
-    if (frame_buffer_.empty()) return nullptr;
-
+    if (frame_buffer_.empty()) {
+        return nullptr;
+    }
+    
     auto handle = std::make_shared<IRMatHandle>();
-    cv::Mat tmp(vospi::FRAME_HEIGHT, vospi::FRAME_WIDTH, CV_16UC1, frame_buffer_.data());
-    if (tmp.empty()) return nullptr;
-
-    handle->keep = std::make_shared<cv::Mat>(tmp.clone());
-    if (!handle->keep || handle->keep->empty() || !handle->keep->isContinuous()) return nullptr;
-
+    
+    cv::Mat temp_frame(vospi::FRAME_HEIGHT, vospi::FRAME_WIDTH, CV_16UC1, frame_buffer_.data());
+    if (temp_frame.empty()) {
+        return nullptr;
+    }
+    
+    handle->keep = std::make_shared<cv::Mat>(temp_frame.clone());
+    
+    if (!handle->keep || handle->keep->empty() || !handle->keep->isContinuous()) {
+        return nullptr;
+    }
+    
+    if (!handle->keep->data) {
+        return nullptr;
+    }
+    
     auto& owned = handle->owned;
-    owned.data   = reinterpret_cast<uint16_t*>(handle->keep->data);
-    owned.width  = handle->keep->cols;
+    owned.data = reinterpret_cast<uint16_t*>(handle->keep->data);
+    owned.width = handle->keep->cols;
     owned.height = handle->keep->rows;
-    owned.step   = static_cast<int>(handle->keep->step);
-
-    if (!owned.data) return nullptr;
-    if (owned.width != vospi::FRAME_WIDTH || owned.height != vospi::FRAME_HEIGHT) return nullptr;
-
-    handle->p  = &owned;
-    handle->seq= sequence_.fetch_add(1);
+    owned.step = static_cast<int>(handle->keep->step);
+    
+    if (!owned.data) {
+        return nullptr;
+    }
+    
+    if (owned.width != vospi::FRAME_WIDTH || owned.height != vospi::FRAME_HEIGHT) {
+        return nullptr;
+    }
+    
+    handle->p = &owned;
+    handle->seq = sequence_.fetch_add(1);
     handle->ts = get_timestamp_ns();
+    
     return handle;
 }
 

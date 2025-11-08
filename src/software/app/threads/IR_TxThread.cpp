@@ -158,41 +158,71 @@ void IR_TxThread::wait_for_frame() {
 
 // 안전한 프레임 푸시(세그폴트 방지) : 16U→8U 정규화 후 GRAY8 전송
 void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle) {
-    // 0) 핸들/포인터 유효성
-    if (!handle) { LOGE(TAG, "Null frame handle"); return; }
-    if (!handle->p) { LOGE(TAG, "Null IRFrame16 pointer"); return; }
-    if (!handle->p->data) { LOGE(TAG, "Null frame data"); return; }
-
-    // 1) Mat 소유 수명 보장: IRMatHandle이면 keep를 강참조로 잡고 포인터 일치 확인
-    std::shared_ptr<cv::Mat> mat_keeper;
-    if (auto* mat_handle = dynamic_cast<IRMatHandle*>(handle.get())) {
-        if (!mat_handle->keep || mat_handle->keep->empty() || !mat_handle->keep->data) {
-            LOGE(TAG, "Invalid cv::Mat in handle");
+    if (!handle) {
+        LOGE(TAG, "Null frame handle");
+        return;
+    }
+    
+    if (!handle->p) {
+        LOGE(TAG, "Null frame pointer in handle");
+        return;
+    }
+    
+    if (!handle->p->data) {
+        LOGE(TAG, "Null data pointer in frame");
+        return;
+    }
+    
+    auto* mat_handle = dynamic_cast<IRMatHandle*>(handle.get());
+    if (mat_handle) {
+        if (!mat_handle->keep || mat_handle->keep->empty()) {
+            LOGE(TAG, "Invalid cv::Mat in frame handle");
             return;
         }
+        
         if (mat_handle->keep->data != reinterpret_cast<uint8_t*>(handle->p->data)) {
-            LOGE(TAG, "Data pointer mismatch (possible use-after-free)");
+            LOGE(TAG, "Data pointer mismatch - possible use-after-free");
             return;
         }
-        mat_keeper = mat_handle->keep; // 복사 중 수명 보장
     }
 
     const IRFrame16& f = *handle->p;
 
-    // 2) 16U → 8U 정규화
+    std::shared_ptr<cv::Mat> mat_keeper;
+    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(f.data);
+    
+    if (mat_handle && mat_handle->keep) {
+        mat_keeper = mat_handle->keep;
+        
+        if (mat_keeper->empty() || !mat_keeper->data) {
+            LOGE(TAG, "cv::Mat became invalid before memcpy");
+            return;
+        }
+        
+        if (mat_keeper->data != reinterpret_cast<uint8_t*>(handle->p->data)) {
+            LOGE(TAG, "Data pointer changed before memcpy");
+            return;
+        }
+        
+        src16 = reinterpret_cast<const uint16_t*>(mat_keeper->data);
+    }
+
+    // 16U → 8U 정규화
     cv::Mat gray8;
     normalize16_to8(f, gray8);  // 7000~10000 → 0~255
 
-    const size_t need_bytes = static_cast<size_t>(gst_config_.width) * gst_config_.height; // caps와 동일해야 함
+    const size_t need_bytes = static_cast<size_t>(gst_config_.width) * gst_config_.height;
     if (static_cast<size_t>(gray8.total()) != need_bytes) {
         LOGE(TAG, "size mismatch: gray8=%zu, caps=%zu (drop frame)",
              (size_t)gray8.total(), need_bytes);
         return;
     }
 
-    // 3) GST 버퍼 생성/매핑
     GstBuffer* buffer = gst_buffer_new_allocate(nullptr, need_bytes, nullptr);
-    if (!buffer) { LOGE(TAG, "gst_buffer_new_allocate failed"); return; }
+    if (!buffer) { 
+        LOGE(TAG, "gst_buffer_new_allocate failed"); 
+        return; 
+    }
 
     GstMapInfo map;
     if (!gst_buffer_map(buffer, &map, GST_MAP_WRITE)) {
@@ -200,30 +230,33 @@ void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle
         gst_buffer_unref(buffer);
         return;
     }
+    
     if (map.size < need_bytes) {
-        LOGE(TAG, "gst buffer too small: %zu < %zu", (size_t)map.size, need_bytes);
+        LOGE(TAG, "GStreamer buffer too small: needed=%zu got=%zu", need_bytes, (size_t)map.size);
         gst_buffer_unmap(buffer, &map);
         gst_buffer_unref(buffer);
         return;
     }
 
-    // 4) 복사 (mat_keeper가 scope에 있어 데이터 수명 보장)
+    if (!gray8.data) {
+        LOGE(TAG, "Source pointer is null before memcpy");
+        gst_buffer_unmap(buffer, &map);
+        gst_buffer_unref(buffer);
+        return;
+    }
+
     std::memcpy(map.data, gray8.data, need_bytes);
     gst_buffer_unmap(buffer, &map);
 
-    // 5) 타임스탬프/길이
-    GST_BUFFER_PTS(buffer)      = handle->ts; // ns 단위(우리 생성 ts가 ns)
+    GST_BUFFER_PTS(buffer)      = handle->ts;
     GST_BUFFER_DTS(buffer)      = handle->ts;
     GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, gst_config_.fps);
 
-    // 6) push (실패 시 반드시 unref)
     const GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
     if (ret != GST_FLOW_OK) {
         LOGE(TAG, "gst_app_src_push_buffer failed (%d)", (int)ret);
-        gst_buffer_unref(buffer); // ★ 중요: 실패 시 우리 소유
-        return;
+        gst_buffer_unref(buffer);
     }
-    // 성공 시 GStreamer가 buffer 소유
 }
 
 void IR_TxThread::run() {
@@ -243,7 +276,7 @@ void IR_TxThread::run() {
             double loop_ms = 0.0;
             CSV_LOG_SIMPLE("IR.Tx", "LOOP_BEGIN", handle ? handle->seq : 0, 0,0,0,0, "");
             try {
-                ScopedTimerMs timer(loop_ms);
+                flir::ScopedTimerMs timer(loop_ms);
                 push_frame_to_gst(handle);
             } catch (const std::exception& e) {
                 ++sec_fail;
@@ -253,7 +286,7 @@ void IR_TxThread::run() {
 
             ++total_frames;
             ++sec_frames;
-            sec_bytes += static_cast<uint64_t>(gst_config_.width) * gst_config_.height; // GRAY8 바이트
+            sec_bytes += static_cast<uint64_t>(gst_config_.width) * gst_config_.height;
         }
 
         frame_seq_seen_ = mb_.latest_seq();

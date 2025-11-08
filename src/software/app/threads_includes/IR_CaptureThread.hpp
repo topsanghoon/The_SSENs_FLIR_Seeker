@@ -7,6 +7,7 @@
 #include <chrono>
 #include <functional>
 #include <condition_variable>
+#include <mutex>
 
 #include <opencv2/core.hpp>
 #include "components/includes/IR_Frame.hpp"
