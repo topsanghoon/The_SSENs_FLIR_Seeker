@@ -282,53 +282,47 @@ bool IR_CaptureThread::capture_segment(int /*seg_id*/){
     const int MAX_RESETS = 750;
 
     while (running_.load()){
-        int packets = 0;
+        // Robust packet collection: accept out-of-order packets and place them by line index.
+        // This prevents distortion when packets arrive duplicated or slightly out-of-order.
+        std::vector<char> seen(vospi::LINES_PER_SEGMENT, 0);
+        int unique_lines = 0;
 
-        for (int expected_line=0; expected_line<vospi::PACKETS_PER_SEGMENT; ++expected_line){
-            // Critical: Validate packet buffer before SPI operation
+        for (int try_idx = 0; try_idx < vospi::PACKETS_PER_SEGMENT && running_.load(); ++try_idx) {
+            // Validate packet buffer before SPI operation
             if (packet_buffer_.size() < vospi::PACKET_SIZE) {
                 LOGE(TAG, "CRITICAL: packet buffer too small! size=%zu, need=%d", 
                      packet_buffer_.size(), vospi::PACKET_SIZE);
                 return false;
             }
-            
+
             if (!read_vospi_packet(packet_buffer_.data())) return false;
 
             if (is_discard_packet(packet_buffer_.data())){
                 discard_count_.fetch_add(1);
                 ::usleep(1000);
-                expected_line = -1;
                 if (++resets >= MAX_RESETS){ std::this_thread::sleep_for(std::chrono::milliseconds(185)); resets=0; }
+                // continue to next packet; do not reset try_idx here so we keep limited attempts
                 continue;
             }
 
             int line = get_packet_line_number(packet_buffer_.data());
             if (line < 0 || line >= vospi::LINES_PER_SEGMENT){
-                expected_line = -1;
                 ::usleep(1000);
                 if (++resets >= MAX_RESETS){ std::this_thread::sleep_for(std::chrono::milliseconds(185)); resets=0; }
                 continue;
             }
 
-            if (line != expected_line){
-                expected_line = -1;
-                ::usleep(1000);
-                if (++resets >= MAX_RESETS){ std::this_thread::sleep_for(std::chrono::milliseconds(185)); resets=0; }
+            // If we've already seen this line, ignore duplicate
+            if (seen[line]) {
+                // duplicate packet for the same line — ignore
                 continue;
             }
 
-            const int off = packets * vospi::PAYLOAD_SIZE;
-            
-            // Critical bounds check - discard overflow packets instead of crashing
-            if (packets >= vospi::PACKETS_PER_SEGMENT) {
-                LOGW(TAG, "Discarding overflow packet: packets=%d, expected max=%d", 
-                     packets, vospi::PACKETS_PER_SEGMENT - 1);
-                break; // Exit loop, we have enough packets
-            }
-            
+            // Bounds and packet sanity checks
+            const int off = line * vospi::PAYLOAD_SIZE;
             if (off + vospi::PAYLOAD_SIZE > static_cast<int>(segment_buffer_.size())) {
-                LOGE(TAG, "CRITICAL: segment buffer memcpy overflow! packets=%d, off=%d, payload=%d, size=%zu", 
-                     packets, off, vospi::PAYLOAD_SIZE, segment_buffer_.size());
+                LOGE(TAG, "CRITICAL: segment buffer memcpy overflow! line=%d off=%d payload=%d size=%zu",
+                     line, off, vospi::PAYLOAD_SIZE, segment_buffer_.size());
                 return false;
             }
             if (packet_buffer_.size() < 4 + vospi::PAYLOAD_SIZE) {
@@ -336,14 +330,17 @@ bool IR_CaptureThread::capture_segment(int /*seg_id*/){
                      packet_buffer_.size(), 4 + vospi::PAYLOAD_SIZE);
                 return false;
             }
-            
+
             std::memcpy(&segment_buffer_[off], &packet_buffer_[4], vospi::PAYLOAD_SIZE);
-            ++packets;
+            seen[line] = 1;
+            ++unique_lines;
             resets = 0;
+
+            if (unique_lines >= vospi::LINES_PER_SEGMENT) break; // got all lines for this segment
         }
 
-        // Success if we got the expected number of packets (or broke out due to overflow)
-        if (packets >= vospi::PACKETS_PER_SEGMENT) return true;
+        // Success only if we collected all expected lines
+        if (unique_lines >= vospi::LINES_PER_SEGMENT) return true;
     }
     return false;
 }
