@@ -33,7 +33,6 @@ IR_CaptureThread::IR_CaptureThread(
     , wake_handle_(std::move(wake_handle))
     , config_(config)
     , spi_fd_(-1)
-    // Lepton 2.x 기본: 세그먼트 버퍼는 "세그먼트 1개" 크기
     , segment_buffer_(vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE)
     , frame_buffer_(vospi::FRAME_WIDTH * vospi::FRAME_HEIGHT)
     , packet_buffer_(vospi::PACKET_SIZE)
@@ -62,7 +61,7 @@ void IR_CaptureThread::perform_safe_reset(){
         if (::ioctl(i2c_fd, 0x0703, 0x2a) >= 0) { // I2C_SLAVE
             uint8_t reboot_cmd[4] = {0x08, 0x02, 0x00, 0x00};
             if (::write(i2c_fd, reboot_cmd, 4) == 4) {
-                ::usleep(750000); // 750ms
+                ::usleep(vospi::I2C_REBOOT_US);
             } else {
                 LOGE(TAG, "I2C reboot write failed");
             }
@@ -74,11 +73,15 @@ void IR_CaptureThread::perform_safe_reset(){
         LOGE(TAG, "open(/dev/i2c-0) failed");
     }
 
-    // SPI 재초기화
     reset_requested_.store(false);
+
     if (!initialize_spi()) {
         LOGE(TAG, "Failed to reinitialize SPI after reset");
     }
+
+    // 소프트 누적 초기화
+    soft_resets_.store(0);
+    soft_win_start_ = {};
 
     reset_cv_.notify_one();
 }
@@ -121,30 +124,55 @@ void IR_CaptureThread::join(){
     if (watchdog_thread_.joinable()) watchdog_thread_.join();
 }
 
-// -------------------- Watchdog (1초) --------------------
-//
-// 1초마다 확인해서, 직전 1초 동안 frame_count_ 증가가 없으면 즉시 리셋 요청.
-//
+// -------------------- 보조: 소프트 리셋/승격 --------------------
+
+void IR_CaptureThread::soft_reopen_spi_(){
+    std::lock_guard<std::mutex> lk(spi_mutex_);
+    if (spi_fd_ >= 0) { ::close(spi_fd_); spi_fd_ = -1; }
+    if (!initialize_spi()) {
+        LOGE(TAG, "SPI soft-reopen failed");
+    }
+}
+
+void IR_CaptureThread::note_soft_reset_and_maybe_escalate_(){
+    auto now = std::chrono::steady_clock::now();
+    if (soft_win_start_.time_since_epoch().count() == 0 ||
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - soft_win_start_).count() > vospi::SOFT_WINDOW_MS) {
+        soft_win_start_ = now;
+        soft_resets_.store(0);
+    }
+    if (soft_resets_.fetch_add(1) + 1 >= vospi::SPI_REOPEN_LIMIT) {
+        LOGW(TAG, "Escalate to full reset (I2C)");
+        perform_safe_reset();
+        soft_resets_.store(0);
+        soft_win_start_ = {};
+    }
+}
+
+// -------------------- Watchdog (빠른 감지 + 계층 복구) --------------------
 
 void IR_CaptureThread::watchdog_run(){
-    uint64_t last = 0;
+    uint64_t last_fc = 0;
+    auto last_tick = std::chrono::steady_clock::now();
 
     while (watchdog_running_.load()){
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(vospi::WD_PERIOD_MS));
         if (!running_.load()) continue;
 
-        const uint64_t cur = frame_count_.load();
-        if (cur == last && cur > 0){
-            LOGW(TAG, "Watchdog: no new frames ~1s → request reset");
-            reset_requested_.store(true);
+        const uint64_t cur_fc = frame_count_.load();
+        auto now = std::chrono::steady_clock::now();
+        auto stalled_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick).count();
 
-            // 리셋 완료 대기 (최대 2초)
-            std::unique_lock<std::mutex> lock(reset_mutex_);
-            reset_cv_.wait_for(lock, std::chrono::seconds(2), [this]() {
-                return !reset_requested_.load();
-            });
+        if (cur_fc == last_fc && cur_fc > 0 && stalled_ms >= vospi::WD_STALL_THRESH_MS){
+            LOGW(TAG, "Watchdog: stall ~%lldms → SPI soft reset", (long long)stalled_ms);
+            soft_reopen_spi_();
+            note_soft_reset_and_maybe_escalate_();
+            last_tick = now; // 타이머 리셋
+        } else if (cur_fc != last_fc) {
+            last_tick = now; // 정상 증가
         }
-        last = frame_count_.load();
+
+        last_fc = cur_fc;
     }
 }
 
@@ -211,7 +239,6 @@ void IR_CaptureThread::run(){
     auto log_t0 = std::chrono::steady_clock::now();
     uint64_t last_f=0, last_e=0, last_d=0;
 
-    // 상수 로깅(디버깅 편의)
     LOGI(TAG, "VoSPI cfg: SEG=%d PPK=%d LINES=%d W=%d H=%d PAYLOAD=%d",
          vospi::SEGMENTS_PER_FRAME, vospi::PACKETS_PER_SEGMENT,
          vospi::LINES_PER_SEGMENT, vospi::FRAME_WIDTH,
@@ -261,13 +288,7 @@ void IR_CaptureThread::run(){
     LOGI(TAG, "IR capture thread stopped.");
 }
 
-// -------------------- VoSPI (LeptonThread 스타일) --------------------
-//
-// - 라인 번호 불일치 시 세그먼트 재동기화
-// - 텔레메트리(line >= LINES_PER_SEGMENT)는 완전 스킵(카운트 증가 금지)
-// - 유효 라인 60개(0..59)를 채웠을 때만 세그먼트 성공
-// - resets가 750 누적되면 즉시 안전 리셋
-//
+// -------------------- VoSPI (LeptonThread 스타일 + 개선된 재동기) --------------------
 
 bool IR_CaptureThread::capture_vospi_frame(){
     for (int seg=0; seg<vospi::SEGMENTS_PER_FRAME; ++seg){
@@ -280,17 +301,14 @@ bool IR_CaptureThread::capture_vospi_frame(){
 }
 
 bool IR_CaptureThread::capture_segment(int seg_id){
-    constexpr int MAX_RESETS = 750; // LeptonThread와 동일 기준
-    int resets = 0;
+    int resets = 0; // 재동기/디스카드 누적
 
-    // Lepton 3.x 대비: 세그먼트 시작 오프셋(바이트). Lepton 2.5면 SEGMENTS_PER_FRAME=1.
     const int seg_base = seg_id * (vospi::PACKETS_PER_SEGMENT * vospi::PAYLOAD_SIZE);
 
     int expected_line = 0; // 0..59
     int packets = 0;       // 유효 라인 수
 
     while (running_.load() && packets < vospi::PACKETS_PER_SEGMENT) {
-        // 패킷 버퍼 크기 보장
         if (packet_buffer_.size() < vospi::PACKET_SIZE) {
             LOGE(TAG, "CRITICAL: packet buffer too small! size=%zu need=%d",
                  packet_buffer_.size(), vospi::PACKET_SIZE);
@@ -302,14 +320,14 @@ bool IR_CaptureThread::capture_segment(int seg_id){
             return false;
         }
 
-        // 0xFxxx (discard/텔레메트리) → 완전 스킵 (카운트/expected 불변)
+        // 0xFxxx (discard/텔레메트리 헤더) → 완전 스킵
         if (is_discard_packet(packet_buffer_.data())) {
             discard_count_.fetch_add(1);
-            ::usleep(100);
-            if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many discards (>=750) → safe reset");
-                perform_safe_reset();
-                // 세그먼트 상태 초기화 후 다시 시도
+            ::usleep(vospi::DISCARD_SLEEP_US);
+            if (++resets >= vospi::MAX_RESYNC_FAST) {
+                LOGW(TAG, "segment: too many discards/resync → SPI soft reset");
+                soft_reopen_spi_();
+                note_soft_reset_and_maybe_escalate_();
                 resets = 0; expected_line = 0; packets = 0;
             }
             continue;
@@ -319,10 +337,11 @@ bool IR_CaptureThread::capture_segment(int seg_id){
 
         // 텔레메트리 라인(예: line==60) → 완전 스킵
         if (line >= vospi::LINES_PER_SEGMENT) {
-            ::usleep(50);
-            if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many telemetry skips (>=750) → safe reset");
-                perform_safe_reset();
+            ::usleep(vospi::DISCARD_SLEEP_US);
+            if (++resets >= vospi::MAX_RESYNC_FAST) {
+                LOGW(TAG, "segment: too many telemetry skips → SPI soft reset");
+                soft_reopen_spi_();
+                note_soft_reset_and_maybe_escalate_();
                 resets = 0; expected_line = 0; packets = 0;
             }
             continue;
@@ -332,11 +351,12 @@ bool IR_CaptureThread::capture_segment(int seg_id){
         if (line < 0 || line != expected_line) {
             expected_line = 0;
             packets = 0;
-            ::usleep(500);
-            if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many resyncs (>=750) → safe reset");
-                perform_safe_reset();
-                resets = 0; // 이후 처음부터 다시 채움
+            ::usleep(vospi::DISCARD_SLEEP_US);
+            if (++resets >= vospi::MAX_RESYNC_FAST) {
+                LOGW(TAG, "segment: resync overflow → SPI soft reset");
+                soft_reopen_spi_();
+                note_soft_reset_and_maybe_escalate_();
+                resets = 0;
             }
             continue;
         }
@@ -488,12 +508,10 @@ inline bool IR_CaptureThread::is_sync_packet(const uint8_t* p){
     return (p[0]==0x00) && (p[1]==0x00);
 }
 
-// 0xFxxx 헤더(텔레메트리/디스카드) 검출
 inline bool IR_CaptureThread::is_discard_packet(const uint8_t* p){
     return ((p[0] & 0x0F) == 0x0F);
 }
 
-// 두 번째 바이트(라인 번호)
 inline int IR_CaptureThread::get_packet_line_number(const uint8_t* p){
     return static_cast<int>(p[1]);
 }
