@@ -319,10 +319,16 @@ bool IR_CaptureThread::capture_segment(int /*seg_id*/){
 
             const int off = packets * vospi::PAYLOAD_SIZE;
             
-            // Critical bounds check for segment buffer memcpy
+            // Critical bounds check - discard overflow packets instead of crashing
+            if (packets >= vospi::PACKETS_PER_SEGMENT) {
+                LOGW(TAG, "Discarding overflow packet: packets=%d, expected max=%d", 
+                     packets, vospi::PACKETS_PER_SEGMENT - 1);
+                break; // Exit loop, we have enough packets
+            }
+            
             if (off + vospi::PAYLOAD_SIZE > static_cast<int>(segment_buffer_.size())) {
-                LOGE(TAG, "CRITICAL: segment buffer memcpy overflow! off=%d, payload=%d, size=%zu", 
-                     off, vospi::PAYLOAD_SIZE, segment_buffer_.size());
+                LOGE(TAG, "CRITICAL: segment buffer memcpy overflow! packets=%d, off=%d, payload=%d, size=%zu", 
+                     packets, off, vospi::PAYLOAD_SIZE, segment_buffer_.size());
                 return false;
             }
             if (packet_buffer_.size() < 4 + vospi::PAYLOAD_SIZE) {
@@ -336,7 +342,8 @@ bool IR_CaptureThread::capture_segment(int /*seg_id*/){
             resets = 0;
         }
 
-        if (packets == vospi::PACKETS_PER_SEGMENT) return true;
+        // Success if we got the expected number of packets (or broke out due to overflow)
+        if (packets >= vospi::PACKETS_PER_SEGMENT) return true;
     }
     return false;
 }
