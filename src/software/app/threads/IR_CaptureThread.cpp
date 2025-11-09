@@ -17,7 +17,13 @@
 
 namespace flir {
 
-namespace { constexpr const char* TAG = "IR_Cap"; }
+namespace {
+constexpr const char* TAG = "IR_Cap";
+
+// --- 튜닝 파라미터 ---
+constexpr int COOLDOWN_MS_AFTER_I2C = 3500; // I2C 리셋 직후 이 시간 동안 풀 리셋 금지
+constexpr int WD_STALL_MIN_MS       = 1200; // 이 값보다 짧은 stall은 WD가 무시(디바운스)
+} // anonymous
 
 // -------------------- Ctor / Dtor --------------------
 
@@ -79,9 +85,11 @@ void IR_CaptureThread::perform_safe_reset(){
         LOGE(TAG, "Failed to reinitialize SPI after reset");
     }
 
-    // === 변경점: I2C 리셋 직후에만 소프트 리셋 1회 허용 토큰 발급 ===
-    soft_resets_.store(1);         // 1 => 소프트 리셋 1회 허용
-    soft_win_start_ = {};          // 의미 없음. 초기화만 유지
+    // === 정책: I2C 리셋 직후 '소프트 리셋 1회'만 허용 ===
+    soft_resets_.store(1);
+
+    // === I2C 리셋 시각을 soft_win_start_에 기록하여 '쿨다운 타이머'로 사용 ===
+    soft_win_start_ = std::chrono::steady_clock::now();
 
     reset_cv_.notify_one();
 }
@@ -106,8 +114,9 @@ void IR_CaptureThread::start(){
         }
     }
 
-    // === 변경점: 최초 기동 시엔 소프트 리셋 토큰 없음 ===
+    // 최초 기동 시엔 소프트 리셋 토큰 없음
     soft_resets_.store(0);
+    soft_win_start_ = {}; // 쿨다운 기준점 초기화
 
     running_.store(true);
     watchdog_running_.store(true);
@@ -166,16 +175,29 @@ void IR_CaptureThread::watchdog_run(){
         auto now = std::chrono::steady_clock::now();
         auto stalled_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick).count();
 
-        if (cur_fc == last_fc && cur_fc > 0 && stalled_ms >= vospi::WD_STALL_THRESH_MS){
-            // === 변경점: 토큰 있으면 soft, 없으면 즉시 I2C 리셋 ===
+        if (cur_fc == last_fc && cur_fc > 0 &&
+            stalled_ms >= std::max<long long>(vospi::WD_STALL_THRESH_MS, WD_STALL_MIN_MS)) {
+
+            // I2C 리셋 직후 쿨다운 유효?
+            bool cooldown_active = false;
+            if (soft_win_start_.time_since_epoch().count() != 0) {
+                auto cooldown_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - soft_win_start_).count();
+                cooldown_active = (cooldown_elapsed < COOLDOWN_MS_AFTER_I2C);
+            }
+
             if (soft_resets_.fetch_sub(1) > 0) {
                 LOGW(TAG, "Watchdog: stall ~%lldms → one-time SPI soft reset", (long long)stalled_ms);
                 soft_reopen_spi_();
             } else {
-                LOGW(TAG, "Watchdog: stall ~%lldms → escalate to full reset (I2C)", (long long)stalled_ms);
-                perform_safe_reset();
+                if (cooldown_active) {
+                    LOGW(TAG, "Watchdog: stall ~%lldms → suppress full reset (I2C cooldown)", (long long)stalled_ms);
+                    // 억제: 재트리거 방지용 타이머만 리셋
+                } else {
+                    LOGW(TAG, "Watchdog: stall ~%lldms → escalate to full reset (I2C)", (long long)stalled_ms);
+                    perform_safe_reset();
+                }
             }
-            last_tick = now; // 타이머 리셋
+            last_tick = std::chrono::steady_clock::now(); // 타이머 리셋(억제/리셋 공통)
         } else if (cur_fc != last_fc) {
             last_tick = now; // 정상 증가
         }
@@ -332,14 +354,26 @@ bool IR_CaptureThread::capture_segment(int seg_id){
         if (is_discard_packet(packet_buffer_.data())) {
             discard_count_.fetch_add(1);
             ::usleep(vospi::DISCARD_SLEEP_US);
+
             if (++resets >= vospi::MAX_RESYNC_FAST) {
-                // === 변경점: 토큰 있으면 soft, 없으면 즉시 I2C 리셋 ===
+                // 쿨다운 활성 여부 확인
+                bool cooldown_active = false;
+                auto now = std::chrono::steady_clock::now();
+                if (soft_win_start_.time_since_epoch().count() != 0) {
+                    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - soft_win_start_).count();
+                    cooldown_active = (ms < COOLDOWN_MS_AFTER_I2C);
+                }
+
                 if (soft_resets_.fetch_sub(1) > 0) {
                     LOGW(TAG, "segment: too many discards/resync → one-time SPI soft reset");
                     soft_reopen_spi_();
                 } else {
-                    LOGW(TAG, "segment: too many discards/resync → escalate to full reset (I2C)");
-                    perform_safe_reset();
+                    if (cooldown_active) {
+                        LOGW(TAG, "segment: too many discards/resync → suppress full reset (I2C cooldown)");
+                    } else {
+                        LOGW(TAG, "segment: too many discards/resync → escalate to full reset (I2C)");
+                        perform_safe_reset();
+                    }
                 }
                 resets = 0; expected_line = 0; packets = 0;
             }
@@ -351,13 +385,25 @@ bool IR_CaptureThread::capture_segment(int seg_id){
         // 텔레메트리 라인(예: line==60) → 완전 스킵
         if (line >= vospi::LINES_PER_SEGMENT) {
             ::usleep(vospi::DISCARD_SLEEP_US);
+
             if (++resets >= vospi::MAX_RESYNC_FAST) {
+                bool cooldown_active = false;
+                auto now = std::chrono::steady_clock::now();
+                if (soft_win_start_.time_since_epoch().count() != 0) {
+                    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - soft_win_start_).count();
+                    cooldown_active = (ms < COOLDOWN_MS_AFTER_I2C);
+                }
+
                 if (soft_resets_.fetch_sub(1) > 0) {
                     LOGW(TAG, "segment: too many telemetry skips → one-time SPI soft reset");
                     soft_reopen_spi_();
                 } else {
-                    LOGW(TAG, "segment: too many telemetry skips → escalate to full reset (I2C)");
-                    perform_safe_reset();
+                    if (cooldown_active) {
+                        LOGW(TAG, "segment: too many telemetry skips → suppress full reset (I2C cooldown)");
+                    } else {
+                        LOGW(TAG, "segment: too many telemetry skips → escalate to full reset (I2C)");
+                        perform_safe_reset();
+                    }
                 }
                 resets = 0; expected_line = 0; packets = 0;
             }
@@ -369,13 +415,25 @@ bool IR_CaptureThread::capture_segment(int seg_id){
             expected_line = 0;
             packets = 0;
             ::usleep(vospi::DISCARD_SLEEP_US);
+
             if (++resets >= vospi::MAX_RESYNC_FAST) {
+                bool cooldown_active = false;
+                auto now = std::chrono::steady_clock::now();
+                if (soft_win_start_.time_since_epoch().count() != 0) {
+                    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - soft_win_start_).count();
+                    cooldown_active = (ms < COOLDOWN_MS_AFTER_I2C);
+                }
+
                 if (soft_resets_.fetch_sub(1) > 0) {
                     LOGW(TAG, "segment: resync overflow → one-time SPI soft reset");
                     soft_reopen_spi_();
                 } else {
-                    LOGW(TAG, "segment: resync overflow → escalate to full reset (I2C)");
-                    perform_safe_reset();
+                    if (cooldown_active) {
+                        LOGW(TAG, "segment: resync overflow → suppress full reset (I2C cooldown)");
+                    } else {
+                        LOGW(TAG, "segment: resync overflow → escalate to full reset (I2C)");
+                        perform_safe_reset();
+                    }
                 }
                 resets = 0;
             }
