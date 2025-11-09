@@ -96,7 +96,7 @@ void IR_CaptureThread::perform_safe_reset(){
 
 // ★ 논블로킹 버전 (A안)
 void IR_CaptureThread::reset_camera(){
-    reset_requested_.store(true);
+    // reset_requested_.store(true);
     reset_cv_.notify_all();            // 대기 중인 쪽이 있으면 즉시 깨움
     LOGW(TAG, "IR reset requested (non-blocking).");
 }
