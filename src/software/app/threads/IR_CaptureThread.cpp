@@ -79,9 +79,9 @@ void IR_CaptureThread::perform_safe_reset(){
         LOGE(TAG, "Failed to reinitialize SPI after reset");
     }
 
-    // 소프트 누적 초기화
-    soft_resets_.store(0);
-    soft_win_start_ = {};
+    // === 변경점: I2C 리셋 직후에만 소프트 리셋 1회 허용 토큰 발급 ===
+    soft_resets_.store(1);         // 1 => 소프트 리셋 1회 허용
+    soft_win_start_ = {};          // 의미 없음. 초기화만 유지
 
     reset_cv_.notify_one();
 }
@@ -105,6 +105,9 @@ void IR_CaptureThread::start(){
             throw std::runtime_error("IR_CaptureThread failed to initialize SPI");
         }
     }
+
+    // === 변경점: 최초 기동 시엔 소프트 리셋 토큰 없음 ===
+    soft_resets_.store(0);
 
     running_.store(true);
     watchdog_running_.store(true);
@@ -133,6 +136,7 @@ void IR_CaptureThread::soft_reopen_spi_(){
     }
 }
 
+// NOTE: 남겨두지만 더 이상 호출하지 않음 (정책 변경으로 미사용)
 void IR_CaptureThread::note_soft_reset_and_maybe_escalate_(){
     auto now = std::chrono::steady_clock::now();
     if (soft_win_start_.time_since_epoch().count() == 0 ||
@@ -163,9 +167,14 @@ void IR_CaptureThread::watchdog_run(){
         auto stalled_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick).count();
 
         if (cur_fc == last_fc && cur_fc > 0 && stalled_ms >= vospi::WD_STALL_THRESH_MS){
-            LOGW(TAG, "Watchdog: stall ~%lldms → SPI soft reset", (long long)stalled_ms);
-            soft_reopen_spi_();
-            note_soft_reset_and_maybe_escalate_();
+            // === 변경점: 토큰 있으면 soft, 없으면 즉시 I2C 리셋 ===
+            if (soft_resets_.fetch_sub(1) > 0) {
+                LOGW(TAG, "Watchdog: stall ~%lldms → one-time SPI soft reset", (long long)stalled_ms);
+                soft_reopen_spi_();
+            } else {
+                LOGW(TAG, "Watchdog: stall ~%lldms → escalate to full reset (I2C)", (long long)stalled_ms);
+                perform_safe_reset();
+            }
             last_tick = now; // 타이머 리셋
         } else if (cur_fc != last_fc) {
             last_tick = now; // 정상 증가
@@ -324,9 +333,14 @@ bool IR_CaptureThread::capture_segment(int seg_id){
             discard_count_.fetch_add(1);
             ::usleep(vospi::DISCARD_SLEEP_US);
             if (++resets >= vospi::MAX_RESYNC_FAST) {
-                LOGW(TAG, "segment: too many discards/resync → SPI soft reset");
-                soft_reopen_spi_();
-                note_soft_reset_and_maybe_escalate_();
+                // === 변경점: 토큰 있으면 soft, 없으면 즉시 I2C 리셋 ===
+                if (soft_resets_.fetch_sub(1) > 0) {
+                    LOGW(TAG, "segment: too many discards/resync → one-time SPI soft reset");
+                    soft_reopen_spi_();
+                } else {
+                    LOGW(TAG, "segment: too many discards/resync → escalate to full reset (I2C)");
+                    perform_safe_reset();
+                }
                 resets = 0; expected_line = 0; packets = 0;
             }
             continue;
@@ -338,9 +352,13 @@ bool IR_CaptureThread::capture_segment(int seg_id){
         if (line >= vospi::LINES_PER_SEGMENT) {
             ::usleep(vospi::DISCARD_SLEEP_US);
             if (++resets >= vospi::MAX_RESYNC_FAST) {
-                LOGW(TAG, "segment: too many telemetry skips → SPI soft reset");
-                soft_reopen_spi_();
-                note_soft_reset_and_maybe_escalate_();
+                if (soft_resets_.fetch_sub(1) > 0) {
+                    LOGW(TAG, "segment: too many telemetry skips → one-time SPI soft reset");
+                    soft_reopen_spi_();
+                } else {
+                    LOGW(TAG, "segment: too many telemetry skips → escalate to full reset (I2C)");
+                    perform_safe_reset();
+                }
                 resets = 0; expected_line = 0; packets = 0;
             }
             continue;
@@ -352,9 +370,13 @@ bool IR_CaptureThread::capture_segment(int seg_id){
             packets = 0;
             ::usleep(vospi::DISCARD_SLEEP_US);
             if (++resets >= vospi::MAX_RESYNC_FAST) {
-                LOGW(TAG, "segment: resync overflow → SPI soft reset");
-                soft_reopen_spi_();
-                note_soft_reset_and_maybe_escalate_();
+                if (soft_resets_.fetch_sub(1) > 0) {
+                    LOGW(TAG, "segment: resync overflow → one-time SPI soft reset");
+                    soft_reopen_spi_();
+                } else {
+                    LOGW(TAG, "segment: resync overflow → escalate to full reset (I2C)");
+                    perform_safe_reset();
+                }
                 resets = 0;
             }
             continue;

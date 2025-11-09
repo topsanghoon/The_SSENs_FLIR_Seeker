@@ -33,14 +33,14 @@ namespace vospi {
     static constexpr int   WD_STALL_THRESH_MS    = 300;     // 이 기간 프레임 증가 없으면 복구
     static constexpr int   MAX_RESYNC_FAST       = 120;     // 세그 재동기화 실패 임계
     static constexpr int   DISCARD_SLEEP_US      = 200;     // discard/불일치 대기
-    static constexpr int   SPI_REOPEN_LIMIT      = 3;       // 소프트리셋 누적 임계 (윈도우 내)
+    static constexpr int   SPI_REOPEN_LIMIT      = 10;       // 소프트리셋 누적 임계 (윈도우 내)
     static constexpr int   SOFT_WINDOW_MS        = 2000;    // 소프트리셋 누적 집계 창
-    static constexpr useconds_t I2C_REBOOT_US    = 600000;  // I2C 재부팅 대기
+    static constexpr useconds_t I2C_REBOOT_US    = 750000;  // I2C 재부팅 대기
 }
 
 struct IRCaptureConfig {
     std::string spi_device = "/dev/spidev1.0";
-    uint32_t spi_speed = 2'000'000;
+    uint32_t spi_speed = 1'250'000;
     int fps = 9;
     // inter-transfer delay between chip-select toggles (µs)
     uint32_t spi_delay_usecs = 50;
