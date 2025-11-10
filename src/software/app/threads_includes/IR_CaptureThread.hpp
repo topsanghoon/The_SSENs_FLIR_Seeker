@@ -74,8 +74,6 @@ public:
     uint64_t get_error_count() const { return error_count_.load(); }
     uint64_t get_discard_count() const { return discard_count_.load(); }
 
-    void reset_camera();        // Request hard reset (I2C + SPI) - for external callers
-    void soft_reset_camera();  // Request soft reset (SPI only) - for minor issues
     void set_track_wake(std::unique_ptr<WakeHandle> w) noexcept { track_wake_ = std::move(w); } // ★ 추가
 
 private:
@@ -95,9 +93,8 @@ private:
     std::atomic<bool> reset_requested_{false};
     std::mutex reset_mutex_;
     std::condition_variable reset_cv_;
-    void perform_sync_reset();   // Level 1: Sync-only reset (software)
-    void perform_soft_reset();   // Level 2: SPI-only reset (faster)
-    void perform_safe_reset();   // Level 3: Full I2C + SPI reset
+    void perform_soft_reset();   // SPI-only reset (faster)
+    void perform_safe_reset();   // Full I2C + SPI reset
 
     std::vector<uint8_t>  segment_buffer_;
     std::vector<uint16_t> frame_buffer_;
