@@ -128,10 +128,6 @@ EO_ArucoDetector_OpenCV::detect(const cv::Mat& pf_gray8) {
     std::vector<Detection> out;
     if (pf_gray8.empty()) return out;
 
-    // 1) 사전 고정: ctor에서 이미 DICT_4X4_50로 생성했다면 여기서는 건드리지 않는다.
-    // dict_ = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50); // (중복안전)
-
-    // 2) 프레임 크기 기반 튜닝값 계산 (하지만 멤버에 "기록"하지 않음)
     const int w = pf_gray8.cols, h = pf_gray8.rows;
     const int minSide = std::min(w, h);
     auto makeOddGE3 = [](int v){ if (v < 3) v = 3; if ((v & 1)==0) ++v; return v; };
@@ -146,25 +142,22 @@ EO_ArucoDetector_OpenCV::detect(const cv::Mat& pf_gray8) {
     const double absoluteFloor = 0.010; // 1.0%
     const double baseMinRate = std::max(byPixelFloor, absoluteFloor);
 
-    auto make_params = [&](double k, double approx, double minRate)->cv::Ptr<cv::aruco::DetectorParameters>{
+    auto make_params = [&](double k, double approx, double minRate)->cv::Ptr<cv::aruco::DetectorParameters> {
         auto p = cv::aruco::DetectorParameters::create();
-        // adaptive
         p->adaptiveThreshWinSizeMin  = winMin;
         p->adaptiveThreshWinSizeMax  = winMax;
         p->adaptiveThreshWinSizeStep = winStep;
         p->adaptiveThreshConstant    = k;
 
-        // 기하
-        p->minMarkerPerimeterRate      = (float)minRate; // 0.006~0.02 사이 권장
+        p->minMarkerPerimeterRate      = (float)minRate;
         p->maxMarkerPerimeterRate      = 4.0f;
-        p->polygonalApproxAccuracyRate = approx;         // 0.02~0.08
+        p->polygonalApproxAccuracyRate = approx;
         p->minCornerDistanceRate       = 0.05f;
         p->minDistanceToBorder         = minBorder;
         p->minOtsuStdDev               = 5.0f;
         p->minMarkerDistanceRate       = 0.05f;
         p->markerBorderBits            = 1;
 
-        // 코너 정밀화
         p->cornerRefinementMethod        = cv::aruco::CORNER_REFINE_SUBPIX;
         p->cornerRefinementWinSize       = 5;
         p->cornerRefinementMaxIterations = 30;
@@ -173,7 +166,6 @@ EO_ArucoDetector_OpenCV::detect(const cv::Mat& pf_gray8) {
         return p;
     };
 
-    // 3) 두 번만 시도: (a) 기본 (b) 살짝 완화 — 둘 다 "로컬 파라미터"만 수정
     std::vector<std::vector<cv::Point2f>> corners, rejected;
     std::vector<int> ids;
 
@@ -189,34 +181,45 @@ EO_ArucoDetector_OpenCV::detect(const cv::Mat& pf_gray8) {
     };
 
     bool ok = false;
-    ok = try_once(/*k*/7.0, /*approx*/0.03, /*minRate*/baseMinRate);
-    if (!ok) ok = try_once(/*k*/3.0, /*approx*/0.05, /*minRate*/std::max(baseMinRate, 0.008));
+    ok = try_once(7.0, 0.03, baseMinRate);
+    if (!ok) ok = try_once(3.0, 0.05, std::max(baseMinRate, 0.008));
 
-    // (디버깅에 도움: 후보 생성은 되는지)
-    if (!ok) {
+    if (!ok) return out;
 
-        return out;
-    }
+    // 4) 유효 ID(7 미만) 중 가장 큰 마커 하나 선택 ★ 수정
+    int best_i = -1;
+    double best_area = -1.0;
 
-    // 4) 가장 큰 마커 하나 선택
-    int best_i = -1; double best_area = -1.0;
     for (size_t i = 0; i < ids.size(); ++i) {
+        // (1) ID 유효성 검사
+        if (ids[i] < 0 || ids[i] >= 7) continue; // ★ 7 미만만 허용
         if (corners[i].size() != 4) continue;
+
+        // (2) 면적 계산
         cv::Rect r = cv::boundingRect(corners[i]);
         if (r.width <= 0 || r.height <= 0) continue;
-        double area = 1.0 * r.width * r.height;
-        if (area > best_area) { best_area = area; best_i = (int)i; }
-    }
-    if (best_i < 0) return out;
 
+        double area = static_cast<double>(r.width) * r.height;
+        if (area > best_area) {
+            best_area = area;
+            best_i = static_cast<int>(i);
+        }
+    }
+
+    if (best_i < 0) return out; // 유효 마커 없음
+
+    // (3) 선택된 마커 반환
     const auto& c = corners[best_i];
     cv::Rect r = cv::boundingRect(c);
+
     Detection d;
     d.id = ids[best_i];
     d.corners = { c[0], c[1], c[2], c[3] };
     d.bbox = cv::Rect2f((float)r.x, (float)r.y, (float)r.width, (float)r.height);
     out.push_back(d);
+
     return out;
 }
+
 
 } // namespace flir

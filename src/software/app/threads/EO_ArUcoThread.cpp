@@ -115,7 +115,7 @@ void EO_ArUcoThread::run() {
                 }
 
                 const bool found = !detections.empty();
-
+ 
                 if (found) {
                     for (auto& d : detections) {
                         emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq);
