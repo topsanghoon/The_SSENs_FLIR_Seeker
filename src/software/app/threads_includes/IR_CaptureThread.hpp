@@ -40,7 +40,7 @@ namespace vospi {
 
 struct IRCaptureConfig {
     std::string spi_device = "/dev/spidev1.0";
-    uint32_t spi_speed = 1'250'000;
+    uint32_t spi_speed = 6'250'000;
     int fps = 9;
     // inter-transfer delay between chip-select toggles (µs)
     uint32_t spi_delay_usecs = 50;
