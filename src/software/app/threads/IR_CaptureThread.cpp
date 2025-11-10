@@ -47,8 +47,26 @@ IR_CaptureThread::~IR_CaptureThread(){
 
 // -------------------- Reset (안전 지점에서만 수행) --------------------
 
+void IR_CaptureThread::perform_soft_reset(){
+    LOGW(TAG, "Performing soft reset (SPI only)...");
+    std::lock_guard<std::mutex> lock(spi_mutex_);
+
+    if (spi_fd_ >= 0) {
+        ::close(spi_fd_);
+        spi_fd_ = -1;
+    }
+
+    // Just reinitialize SPI without I2C reboot
+    if (!initialize_spi()) {
+        LOGE(TAG, "Failed to reinitialize SPI after soft reset");
+    }
+
+    // Small delay to let hardware settle
+    ::usleep(10000); // 10ms
+}
+
 void IR_CaptureThread::perform_safe_reset(){
-    LOGW(TAG, "Resetting camera (safe)...");
+    LOGW(TAG, "Performing hard reset (I2C + SPI)...");
     std::lock_guard<std::mutex> lock(spi_mutex_);
 
     if (spi_fd_ >= 0) {
@@ -62,7 +80,7 @@ void IR_CaptureThread::perform_safe_reset(){
         if (::ioctl(i2c_fd, 0x0703, 0x2a) >= 0) { // I2C_SLAVE
             uint8_t reboot_cmd[4] = {0x08, 0x02, 0x00, 0x00};
             if (::write(i2c_fd, reboot_cmd, 4) == 4) {
-                ::usleep(750000); // 750ms
+                ::usleep(200000); // Reduced to 200ms (more reasonable)
             } else {
                 LOGE(TAG, "I2C reboot write failed");
             }
@@ -77,7 +95,7 @@ void IR_CaptureThread::perform_safe_reset(){
     // SPI 재초기화
     reset_requested_.store(false);
     if (!initialize_spi()) {
-        LOGE(TAG, "Failed to reinitialize SPI after reset");
+        LOGE(TAG, "Failed to reinitialize SPI after hard reset");
     }
 
     reset_cv_.notify_one();
@@ -89,6 +107,12 @@ void IR_CaptureThread::reset_camera(){
     reset_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
         return !reset_requested_.load();
     });
+}
+
+void IR_CaptureThread::soft_reset_camera(){
+    // For external callers who want a lighter-weight reset
+    // This will be handled on the next iteration of the capture loop
+    perform_soft_reset();
 }
 
 // -------------------- Start/Stop/Join --------------------
@@ -121,21 +145,23 @@ void IR_CaptureThread::join(){
     if (watchdog_thread_.joinable()) watchdog_thread_.join();
 }
 
-// -------------------- Watchdog (1초) --------------------
+// -------------------- Watchdog (2초) --------------------
 //
-// 1초마다 확인해서, 직전 1초 동안 frame_count_ 증가가 없으면 즉시 리셋 요청.
+// 2초마다 확인해서, 직전 2초 동안 frame_count_ 증가가 없으면 하드 리셋 요청.
+// 하드 리셋은 카메라가 완전히 멈췄을 때 사용 (I2C reboot 필요).
+// VoSPI 프로토콜 에러는 소프트 리셋으로 처리 (SPI만 재시작).
 //
 
 void IR_CaptureThread::watchdog_run(){
     uint64_t last = 0;
 
     while (watchdog_running_.load()){
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::seconds(2));
         if (!running_.load()) continue;
 
         const uint64_t cur = frame_count_.load();
         if (cur == last && cur > 0){
-            LOGW(TAG, "Watchdog: no new frames ~1s → request reset");
+            LOGW(TAG, "Watchdog: no new frames ~2s → request hard reset");
             reset_requested_.store(true);
 
             // 리셋 완료 대기 (최대 2초)
@@ -266,7 +292,7 @@ void IR_CaptureThread::run(){
 // - 라인 번호 불일치 시 세그먼트 재동기화
 // - 텔레메트리(line >= LINES_PER_SEGMENT)는 완전 스킵(카운트 증가 금지)
 // - 유효 라인 60개(0..59)를 채웠을 때만 세그먼트 성공
-// - resets가 750 누적되면 즉시 안전 리셋
+// - resets가 7500 누적되면 소프트 리셋 (SPI만 재시작, 10ms 대기)
 //
 
 bool IR_CaptureThread::capture_vospi_frame(){
@@ -280,7 +306,7 @@ bool IR_CaptureThread::capture_vospi_frame(){
 }
 
 bool IR_CaptureThread::capture_segment(int seg_id){
-    constexpr int MAX_RESETS = 750; // LeptonThread와 동일 기준
+    constexpr int MAX_RESETS = 7500; // Increased tolerance since using soft reset
     int resets = 0;
 
     // Lepton 3.x 대비: 세그먼트 시작 오프셋(바이트). Lepton 2.5면 SEGMENTS_PER_FRAME=1.
@@ -307,8 +333,8 @@ bool IR_CaptureThread::capture_segment(int seg_id){
             discard_count_.fetch_add(1);
             ::usleep(100);
             if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many discards (>=750) → safe reset");
-                perform_safe_reset();
+                LOGW(TAG, "Too many discards (>=7500) → soft reset (SPI only)");
+                perform_soft_reset();
                 // 세그먼트 상태 초기화 후 다시 시도
                 resets = 0; expected_line = 0; packets = 0;
             }
@@ -321,8 +347,8 @@ bool IR_CaptureThread::capture_segment(int seg_id){
         if (line >= vospi::LINES_PER_SEGMENT) {
             ::usleep(50);
             if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many telemetry skips (>=750) → safe reset");
-                perform_safe_reset();
+                LOGW(TAG, "Too many telemetry skips (>=7500) → soft reset (SPI only)");
+                perform_soft_reset();
                 resets = 0; expected_line = 0; packets = 0;
             }
             continue;
@@ -334,8 +360,8 @@ bool IR_CaptureThread::capture_segment(int seg_id){
             packets = 0;
             ::usleep(500);
             if (++resets >= MAX_RESETS) {
-                LOGW(TAG, "Too many resyncs (>=750) → safe reset");
-                perform_safe_reset();
+                LOGW(TAG, "Too many resyncs (>=7500) → soft reset (SPI only)");
+                perform_soft_reset();
                 resets = 0; // 이후 처음부터 다시 채움
             }
             continue;
