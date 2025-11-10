@@ -7,6 +7,7 @@
 #include <chrono>
 #include <functional>
 #include <condition_variable>
+#include <mutex>
 
 #include <opencv2/core.hpp>
 #include "components/includes/IR_Frame.hpp"
@@ -26,11 +27,20 @@ namespace vospi {
     constexpr int SEGMENTS_PER_FRAME = 1;
     constexpr int FRAME_WIDTH = 80;
     constexpr int FRAME_HEIGHT = 60;
+
+    // only for reset / recovery tuning
+    static constexpr int   WD_PERIOD_MS          = 200;     // 워치독 주기
+    static constexpr int   WD_STALL_THRESH_MS    = 300;     // 이 기간 프레임 증가 없으면 복구
+    static constexpr int   MAX_RESYNC_FAST       = 120;     // 세그 재동기화 실패 임계
+    static constexpr int   DISCARD_SLEEP_US      = 200;     // discard/불일치 대기
+    static constexpr int   SPI_REOPEN_LIMIT      = 10;       // 소프트리셋 누적 임계 (윈도우 내)
+    static constexpr int   SOFT_WINDOW_MS        = 2000;    // 소프트리셋 누적 집계 창
+    static constexpr useconds_t I2C_REBOOT_US    = 750000;  // I2C 재부팅 대기
 }
 
 struct IRCaptureConfig {
     std::string spi_device = "/dev/spidev1.0";
-    uint32_t spi_speed = 2'000'000;
+    uint32_t spi_speed = 1'250'000;
     int fps = 9;
     // inter-transfer delay between chip-select toggles (µs)
     uint32_t spi_delay_usecs = 50;
@@ -50,8 +60,8 @@ public:
     IR_CaptureThread(
         std::string name,
         SpscMailbox<std::shared_ptr<IRFrameHandle>>& out_tx,
-        SpscMailbox<std::shared_ptr<IRFrameHandle>>& out_trk,   // ★ 추가
-        std::unique_ptr<WakeHandle> wake_tx,                    // TX 깨우기 (EO와 동일 정책)
+        SpscMailbox<std::shared_ptr<IRFrameHandle>>& out_trk,
+        std::unique_ptr<WakeHandle> wake_tx,
         const IRCaptureConfig& config = IRCaptureConfig{}
     );
     ~IR_CaptureThread();
@@ -74,7 +84,7 @@ public:
     uint64_t get_discard_count() const { return discard_count_.load(); }
 
     void reset_camera();
-    void set_track_wake(std::unique_ptr<WakeHandle> w) noexcept { track_wake_ = std::move(w); } // ★ 추가
+    void set_track_wake(std::unique_ptr<WakeHandle> w) noexcept { track_wake_ = std::move(w); }
 
 private:
     std::string name_;
@@ -95,9 +105,13 @@ private:
     std::condition_variable reset_cv_;
     void perform_safe_reset();  // Only called by capture thread at safe points
 
+    // Soft reset window state (누적 관리)
+    std::atomic<int> soft_resets_{0};
+    std::chrono::steady_clock::time_point soft_win_start_{};
+
     std::vector<uint8_t>  segment_buffer_;
     std::vector<uint16_t> frame_buffer_;
-    std::vector<uint8_t> packet_buffer_;       // Heap-allocated packet buffer (moved from stack to prevent overflow)
+    std::vector<uint8_t>  packet_buffer_; // Heap-allocated packet buffer
 
     std::atomic<uint64_t> frame_count_{0};
     std::atomic<uint64_t> error_count_{0};
@@ -111,6 +125,10 @@ private:
     void run();
     bool initialize_spi();
     void cleanup_spi();
+
+    // 복구 보조
+    void soft_reopen_spi_();                    // 빠른 복구 (SPI만 재오픈)
+    void note_soft_reset_and_maybe_escalate_(); // 누적/윈도 체크 후 하드리셋 승격
 
     bool capture_vospi_frame();
     bool capture_segment(int segment_id);
@@ -128,7 +146,7 @@ private:
 
     // 단계 기반 라우팅 (TX는 항상, TRACK은 Terminal에서만)
     void push_frame_routed_(const std::shared_ptr<IRFrameHandle>& h);
-    std::unique_ptr<WakeHandle> track_wake_;   // ★ 추가
+    std::unique_ptr<WakeHandle> track_wake_;
 };
 
 } // namespace flir
