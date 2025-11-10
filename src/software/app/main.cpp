@@ -133,7 +133,7 @@ int main(int, char**) {
     // --- IR Capture (캡처→TX로 push + TX wake; 캡처→Track은 sink 경유) ---
     IRCaptureConfig ir_cap_cfg{};
     ir_cap_cfg.spi_device      = "/dev/spidev1.0";
-    ir_cap_cfg.spi_speed       = 12'500'000;   // 안정성 우선(필요시 16MHz/20MHz로 조정)
+    ir_cap_cfg.spi_speed       = 6'250'000;   // 안정성 우선(필요시 16MHz/20MHz로 조정)
     ir_cap_cfg.spi_delay_usecs = 0;
     ir_cap_cfg.fps             = app->ir_tx.fps;
 

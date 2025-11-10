@@ -126,6 +126,7 @@ void EO_ArucoDetector_OpenCV::sanitizeParams() {
 std::vector<IArucoDetector::Detection>
 EO_ArucoDetector_OpenCV::detect(const cv::Mat& pf_gray8) {
     std::vector<Detection> out;
+    // return out;
     if (pf_gray8.empty()) return out;
 
     // 1) 사전 고정: ctor에서 이미 DICT_4X4_50로 생성했다면 여기서는 건드리지 않는다.

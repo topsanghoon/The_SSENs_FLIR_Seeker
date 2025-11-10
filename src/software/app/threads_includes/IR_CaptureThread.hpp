@@ -32,8 +32,8 @@ namespace vospi {
     static constexpr int   WD_PERIOD_MS          = 200;     // 워치독 주기
     static constexpr int   WD_STALL_THRESH_MS    = 300;     // 이 기간 프레임 증가 없으면 복구
     static constexpr int   MAX_RESYNC_FAST       = 120;     // 세그 재동기화 실패 임계
-    static constexpr int   DISCARD_SLEEP_US      = 200;     // discard/불일치 대기
-    static constexpr int   SPI_REOPEN_LIMIT      = 10;       // 소프트리셋 누적 임계 (윈도우 내)
+    static constexpr int   DISCARD_SLEEP_US      = 200;     // (참고용) 기본값. 실제 적용은 cpp에서 로컬 값을 사용
+    static constexpr int   SPI_REOPEN_LIMIT      = 10;      // 소프트리셋 누적 임계 (윈도우 내)
     static constexpr int   SOFT_WINDOW_MS        = 2000;    // 소프트리셋 누적 집계 창
     static constexpr useconds_t I2C_REBOOT_US    = 750000;  // I2C 재부팅 대기
 }
@@ -43,7 +43,7 @@ struct IRCaptureConfig {
     uint32_t spi_speed = 6'250'000;
     int fps = 9;
     // inter-transfer delay between chip-select toggles (µs)
-    uint32_t spi_delay_usecs = 50;
+    uint32_t spi_delay_usecs = 50; // 가능하면 0~수 µs로 낮춰 테스트 권장
 };
 
 struct IRMatHandle : IRFrameHandle {
@@ -126,9 +126,19 @@ private:
     bool initialize_spi();
     void cleanup_spi();
 
+    // 복구/감시 상태 (전역 대신 멤버로 관리)
+    std::atomic<int64_t> last_full_reset_ns_{0};   // 마지막 FULL(I2C) 리셋 시각(ns)
+    std::atomic<int>     wd_consec_stalls_{0};     // 연속 stall 횟수
+    std::atomic<uint64_t> spi_err_count_{0};       // SPI I/O 에러 누적(샘플 간 차분 사용)
+
+    // 가시화 카운터 (1초 통계에 출력)
+    std::atomic<uint64_t> cnt_soft_reopen_{0};
+    std::atomic<uint64_t> cnt_full_reset_{0};
+    std::atomic<uint64_t> cnt_resync_overflow_{0};
+
     // 복구 보조
     void soft_reopen_spi_();                    // 빠른 복구 (SPI만 재오픈)
-    void note_soft_reset_and_maybe_escalate_(); // 누적/윈도 체크 후 하드리셋 승격
+    void note_soft_reset_and_maybe_escalate_(); // (정책 변경: 사용 안함, 선언만 유지)
 
     bool capture_vospi_frame();
     bool capture_segment(int segment_id);
