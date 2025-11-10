@@ -10,6 +10,7 @@
 #include "main_config.hpp"
 #include "guidance_mode.hpp"
 
+
 #include "ipc/event_bus_impl.hpp"
 #include "ipc/mailbox.hpp"
 #include "ipc/wake.hpp"
@@ -47,6 +48,8 @@ static void sig_handler(int s){ std::cout << "\n[SIG] " << s << " → quit\n"; g
 struct DummyWakeTx : WakeHandle { void signal() override {} };
 
 int main(int, char**) {
+
+    cv::setNumThreads(1);
     // ─────────────────────────────────────────────────────────────
     // 0) 프로세스 레벨 초기화
     // ─────────────────────────────────────────────────────────────
@@ -64,16 +67,16 @@ int main(int, char**) {
         app->eo_tx.frame = {320,240};
         app->eo_tx.fps = 30;
         app->eo_tx.jpeg_quality = 30;
-        app->eo_tx.dst = {"192.168.0.18", 5003};
+        app->eo_tx.dst = {"192.168.0.16", 5003};
 
         // IR 송출 (Lepton 2.5)
         app->ir_tx.frame = {80,60};
         app->ir_tx.fps   = 9;
         app->ir_tx.bitDepth = 16;
-        app->ir_tx.dst = {"192.168.0.18", 5002};
+        app->ir_tx.dst = {"192.168.0.16", 5002};
 
         // 메타/네트
-        app->meta_tx.dst          = {"192.168.0.18", 5001};
+        app->meta_tx.dst          = {"192.168.0.16", 5001};
         app->meta_tx.local_port   = 0;
         app->meta_tx.hb_period_ms = 1000;
         app->net_rx.port          = 5000;

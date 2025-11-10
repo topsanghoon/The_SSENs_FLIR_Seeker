@@ -150,7 +150,7 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
     }
 
     // ── 1) 바이너리 클릭: [0x00][f32_be x][f32_be y]
-    if (len == 9 && data[0] == 0x00) {
+    if (len >= 9 && data[0] == 0x00) {
         int32_t xi_be, yi_be;
         std::memcpy(&xi_be, data+1, 4);
         std::memcpy(&yi_be, data+5, 4);
