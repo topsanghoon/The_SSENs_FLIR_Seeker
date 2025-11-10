@@ -73,8 +73,40 @@ void Meta_TxThread::start() {
 
     hb_period_ms_ = cfg_->meta_tx.hb_period_ms;
     CSV_LOG_SIMPLE("Meta.Tx", "THREAD_START", 0, 0,0,0,0, "");
+
+    // =========================================================
+    // ✅ 초기 시작 신호 (5001 포트로 8001번 명령 전송)
+    // =========================================================
+    try {
+        int sock0 = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+        if (sock0 >= 0) {
+            sockaddr_in sa{};
+            sa.sin_family = AF_INET;
+            sa.sin_port = htons(5001);  // 송신 대상 포트 (요구사항)
+            if (::inet_pton(AF_INET, cfg_->meta_tx.dst.ip.c_str(), &sa.sin_addr) == 1) {
+                // payload: 8001 (int32, network byte order)
+                int32_t cmd = htonl(8001);
+                ssize_t n = ::sendto(sock0, &cmd, sizeof(cmd), 0,
+                                     (sockaddr*)&sa, sizeof(sa));
+                if (n < 0)
+                    LOGE(TAG, "initial 8001 send failed: %s", strerror(errno));
+                else
+                    LOGI(TAG, "initial 8001 sent to %s:5001 (%zd bytes)", cfg_->meta_tx.dst.ip.c_str(), n);
+            } else {
+                LOGE(TAG, "invalid IP in cfg_->meta_tx.dst.ip: %s", cfg_->meta_tx.dst.ip.c_str());
+            }
+            ::close(sock0);
+        } else {
+            LOGE(TAG, "socket(5001) failed: %s", strerror(errno));
+        }
+    } catch (...) {
+        LOGW(TAG, "exception during initial 8001 send");
+    }
+    // =========================================================
+
     th_ = std::thread(&Meta_TxThread::run_, this);
 }
+
 
 void Meta_TxThread::stop() {
     if (!running_.load()) return;

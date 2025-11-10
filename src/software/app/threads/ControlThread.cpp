@@ -41,7 +41,14 @@ void ControlThread::start() {
     th_ = std::thread(&ControlThread::run, this);
 
     CSV_LOG_SIMPLE("Ctrl", "THREAD_START", 0, 0,0,0,0, "");
+
+    // ★ 프로그램 시작 신호 전송 (예: 8001)
+    const uint64_t ts = flir::now_ns_steady();
+    CtrlCmd start_cmd = CtrlCmd::make_start_signal(); // 커스텀 함수로 8001 생성
+    Event ev_start{ EventType::MetaCtrl, MetaCtrlEvent{ start_cmd.to_int(), ts } };
+    bus_.push(ev_start, Topic::Control);
 }
+
 
 void ControlThread::stop() {
     if (!running_.load()) return;

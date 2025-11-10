@@ -23,6 +23,10 @@ struct CtrlCmd {
 
     static CtrlCmd make_phase_switch_terminal() { return CtrlCmd{ /*예:*/ 9001u }; } // ★ 예약 코드
 
+    static CtrlCmd make_start_signal() {
+        return CtrlCmd{8001u};
+    }
+
     int to_int() const { return mode; }
 };
 
