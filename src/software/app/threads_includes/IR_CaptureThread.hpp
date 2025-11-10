@@ -95,8 +95,9 @@ private:
     std::atomic<bool> reset_requested_{false};
     std::mutex reset_mutex_;
     std::condition_variable reset_cv_;
-    void perform_soft_reset();   // SPI-only reset (faster)
-    void perform_safe_reset();   // Full I2C + SPI reset
+    void perform_sync_reset();   // Level 1: Sync-only reset (software)
+    void perform_soft_reset();   // Level 2: SPI-only reset (faster)
+    void perform_safe_reset();   // Level 3: Full I2C + SPI reset
 
     std::vector<uint8_t>  segment_buffer_;
     std::vector<uint16_t> frame_buffer_;
