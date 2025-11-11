@@ -12,6 +12,7 @@
 #include <thread>
 #include <atomic>
 #include <vector>
+#include <algorithm>
 
 #include "util/common_log.hpp"
 
@@ -494,29 +495,46 @@ bool IR_CaptureThread::read_vospi_packet(uint8_t* pkt){
 
 // 패킷→프레임(16U) 재구성
 void IR_CaptureThread::reconstruct_frame(){
+    const int W = vospi::FRAME_WIDTH;
+    const int H = vospi::FRAME_HEIGHT;
+
+    auto map_xy = [&](int y, int x, int& dy, int& dx) {
+        // 기본: 변화 없음
+        dy = y; dx = x;
+        // 수직 대칭
+        dy = (H - 1) - dy;
+
+        // 수평 대칭
+        dx = (W - 1) - dx;
+
+    };
+
     for (int seg=0; seg<vospi::SEGMENTS_PER_FRAME; ++seg){
         for (int line=0; line<vospi::LINES_PER_SEGMENT; ++line){
-            const int frame_line = seg*vospi::LINES_PER_SEGMENT + line;
+            const int src_y   = seg*vospi::LINES_PER_SEGMENT + line;
             const int seg_off = (seg*vospi::PACKETS_PER_SEGMENT*vospi::PAYLOAD_SIZE)
                               + (line*vospi::PAYLOAD_SIZE);
-            for (int px=0; px<vospi::PIXELS_PER_LINE; ++px){
-                const int frame_idx = frame_line*vospi::FRAME_WIDTH + px;
-                const int seg_idx   = seg_off + (px*2);
 
-                if (seg_idx + 1 >= static_cast<int>(segment_buffer_.size())) {
-                    LOGE(TAG, "CRITICAL: segment buffer overflow! seg_idx=%d+1 size=%zu seg=%d line=%d px=%d",
-                         seg_idx, segment_buffer_.size(), seg, line, px);
-                    return;
-                }
-                if (frame_idx >= static_cast<int>(frame_buffer_.size())) {
-                    LOGE(TAG, "CRITICAL: frame buffer overflow! frame_idx=%d size=%zu frame_line=%d px=%d",
-                         frame_idx, frame_buffer_.size(), frame_line, px);
+            for (int x=0; x<vospi::PIXELS_PER_LINE; ++x){
+                const int src_idx_in_seg = seg_off + (x*2);
+                if (src_idx_in_seg + 1 >= (int)segment_buffer_.size()) {
+                    LOGE(TAG, "CRITICAL: segment buffer overflow! idx=%d size=%zu", src_idx_in_seg+1, segment_buffer_.size());
                     return;
                 }
 
-                const uint16_t v = (static_cast<uint16_t>(segment_buffer_[seg_idx])<<8)
-                                 | static_cast<uint16_t>(segment_buffer_[seg_idx+1]);
-                frame_buffer_[frame_idx] = v;
+                // 대상 좌표로 맵
+                int dy, dx;
+                map_xy(src_y, x, dy, dx);
+
+                const int dst_idx = dy*W + dx;
+                if (dst_idx < 0 || dst_idx >= (int)frame_buffer_.size()) {
+                    LOGE(TAG, "CRITICAL: frame buffer overflow! dst_idx=%d size=%zu", dst_idx, frame_buffer_.size());
+                    return;
+                }
+
+                const uint16_t v = (uint16_t(segment_buffer_[src_idx_in_seg])<<8)
+                                 | uint16_t(segment_buffer_[src_idx_in_seg+1]);
+                frame_buffer_[dst_idx] = v;
             }
         }
     }
