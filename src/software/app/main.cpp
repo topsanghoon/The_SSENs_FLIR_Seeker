@@ -5,7 +5,12 @@
 #include <memory>
 #include <thread>
 
+#include <sys/auxv.h>
+#include <asm/hwcap.h>
+#include <stdio.h>
+
 #include <opencv2/opencv.hpp>
+#include <opencv2/core/utility.hpp>
 
 #include "main_config.hpp"
 #include "guidance_mode.hpp"
@@ -53,6 +58,20 @@ int main(int, char**) {
     std::signal(SIGINT,  sig_handler);
     std::signal(SIGTERM, sig_handler);
 
+    // unsigned long caps = getauxval(AT_HWCAP);
+    // #ifdef HWCAP_NEON
+    //     printf("[INFO] CPU HWCAP: 0x%lx (NEON %s)\n", caps, (caps & HWCAP_NEON) ? "YES" : "NO");
+    // #endif
+
+    // std::cout << cv::getBuildInformation() << std::endl;
+
+    // bool neon = cv::checkHardwareSupport(CV_CPU_NEON);
+    // std::cout << "[INFO] NEON support: " << (neon ? "YES" : "NO") << std::endl;*
+
+    std::cout <<"[INFO] Application starting..." << std::endl;
+    std::cout <<"[INFO] Application starting..." << std::endl;
+    std::cout <<"[INFO] Application starting..." << std::endl;
+    std::cout <<"[INFO] Application starting..." << std::endl;
     // 전역 설정
     auto app = std::make_shared<AppConfig>();
     {
@@ -63,17 +82,17 @@ int main(int, char**) {
         // EO 송출
         app->eo_tx.frame = {320,240};
         app->eo_tx.fps = 30;
-        app->eo_tx.jpeg_quality = 30;
-        app->eo_tx.dst = {"192.168.0.18", 5003};
+        app->eo_tx.jpeg_quality = 60;
+        app->eo_tx.dst = {"192.168.0.250", 5003};
 
         // IR 송출 (Lepton 2.5)
         app->ir_tx.frame = {80,60};
         app->ir_tx.fps   = 9;
         app->ir_tx.bitDepth = 16;
-        app->ir_tx.dst = {"192.168.0.18", 5002};
+        app->ir_tx.dst = {"192.168.0.250", 5002};
 
         // 메타/네트
-        app->meta_tx.dst          = {"192.168.0.18", 5001};
+        app->meta_tx.dst          = {"192.168.0.250", 5001};
         app->meta_tx.local_port   = 0;
         app->meta_tx.hb_period_ms = 1000;
         app->net_rx.port          = 5000;
@@ -83,8 +102,8 @@ int main(int, char**) {
 
         // 유도 파라미터
         app->guidance.terminal_marker_id = 3;
-        app->guidance.min_bbox_w = 80;
-        app->guidance.min_bbox_h = 80;
+        app->guidance.min_bbox_w = 100;
+        app->guidance.min_bbox_h = 100;
         app->guidance.min_big_frames = 5;
         app->guidance.hold_big_ms = 300;
         app->guidance.min_bbox_frac = 0.0f;

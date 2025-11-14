@@ -37,6 +37,7 @@
         "ENABLE_EO": "ON",
         "FLIR_LOG_DISABLE": "ON",
         "FLIR_CSV_DISABLE": "ON",
+        "DENABLE_NEON": "ON",
           "CMAKE_C_FLAGS_RELEASE": "-O2 -DNDEBUG",
         "CMAKE_CXX_FLAGS_RELEASE": "-O2 -DNDEBUG",
         "CMAKE_EXE_LINKER_FLAGS_RELEASE": "-s"
