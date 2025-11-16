@@ -10,6 +10,7 @@
 #include "ipc/mailbox.hpp"
 #include "ipc/event_bus.hpp"
 #include "components/includes/EO_Frame.hpp"
+#include "main_config.hpp"  // GuidanceConfig
 
 namespace flir {
 
@@ -30,6 +31,19 @@ struct IArucoDetector {
 
 class EO_ArUcoThread {
 public:
+
+    struct Config {
+        // period_ms는 이제 "주기 송신"이 아니라, 내부 FSM 등에 쓰일 수 있는 보조 시간 단위로만 남겨둠
+        int period_ms     = 20;   // 50Hz 상수, 필요시 내부 계산에만 사용
+        int sd_quiesce_ms = 200;
+        int sd_park_ms    = 400;
+
+        // ★ 전환 기준(상위 AppConfig.guidance 주입값을 복사 보관)
+        GuidanceConfig guidance{};
+        // EO 프레임 크기(비율 판단용)
+        int eo_w{640};
+        int eo_h{480};
+    };
     EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb,
                    IArucoPreprocessor& preproc,
                    IArucoDetector& detector,
@@ -52,10 +66,14 @@ private:
                     const cv::Rect2f& box,
                     uint64_t ts_ns, uint32_t frame_seq);
 
+    bool is_big_enough(int bw, int bh) const;
+
     SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb_;
     IArucoPreprocessor& preproc_;
     IArucoDetector& detector_;
     IEventBus& bus_;
+    Config                        cfg_;
+    uint8_t toFindAruco = 1;
 
     std::thread th_;
     std::atomic<bool> running_{false};

@@ -60,6 +60,22 @@ void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){
     cv_.notify_one();                    // ★ 전용 cv로 깨움
 }
 
+bool EO_ArUcoThread::is_big_enough(int bw, int bh) const {
+    
+    // 절대 기준
+    bool big_abs = (bw >= cfg_.guidance.min_bbox_w) &&
+                   (bh >= cfg_.guidance.min_bbox_h);
+
+    // (선택) 비율 기준
+    bool big_frac = false;
+    if (cfg_.guidance.min_bbox_frac > 0.f && cfg_.eo_w > 0 && cfg_.eo_h > 0) {
+        float fw = static_cast<float>(bw) / static_cast<float>(cfg_.eo_w);
+        float fh = static_cast<float>(bh) / static_cast<float>(cfg_.eo_h);
+        big_frac = (std::max(fw, fh) >= cfg_.guidance.min_bbox_frac);
+    }
+    return big_abs || big_frac;
+}
+
 void EO_ArUcoThread::run() {
     LOGI(kTAG, "run() loop enter");
 
@@ -118,7 +134,12 @@ void EO_ArUcoThread::run() {
 
                 if (found) {
                     for (auto& d : detections) {
-                        emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq);
+                        if(toFindAruco == d.id) {
+                            emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq);
+                            if(is_big_enough(static_cast<int>(d.bbox.width), static_cast<int>(d.bbox.height))) {
+                                toFindAruco++;
+                            }
+                        }
                     }
                     // 마커 발견 이벤트: v1=pre_ms, v2=det_ms, note=개수
                     CSV_LOG_SIMPLE("EO.Aruco", "MARKER_FOUND", fr.seq,
