@@ -194,29 +194,32 @@ EO_ArucoDetector_OpenCV::detect(const cv::Mat& pf_gray8) {
     if (!ok) ok = try_once(/*k*/3.0, /*approx*/0.05, /*minRate*/std::max(baseMinRate, 0.008));
 
     // (디버깅에 도움: 후보 생성은 되는지)
+    // (디버깅에 도움: 후보 생성은 되는지)
     if (!ok) {
-
         return out;
     }
 
-    // 4) 가장 큰 마커 하나 선택
-    int best_i = -1; double best_area = -1.0;
+    // 4) 모든 마커를 Detection으로 변환해서 out에 담아 반환
+    out.reserve(ids.size());
     for (size_t i = 0; i < ids.size(); ++i) {
-        if (corners[i].size() != 4) continue;
-        cv::Rect r = cv::boundingRect(corners[i]);
-        if (r.width <= 0 || r.height <= 0) continue;
-        double area = 1.0 * r.width * r.height;
-        if (area > best_area) { best_area = area; best_i = (int)i; }
-    }
-    if (best_i < 0) return out;
+        const auto& c = corners[i];
+        if (c.size() != 4) continue;
 
-    const auto& c = corners[best_i];
-    cv::Rect r = cv::boundingRect(c);
-    Detection d;
-    d.id = ids[best_i];
-    d.corners = { c[0], c[1], c[2], c[3] };
-    d.bbox = cv::Rect2f((float)r.x, (float)r.y, (float)r.width, (float)r.height);
-    out.push_back(d);
+        cv::Rect r = cv::boundingRect(c);
+        if (r.width <= 0 || r.height <= 0) continue;
+
+        Detection d;
+        d.id      = ids[i];
+        d.corners = { c[0], c[1], c[2], c[3] };
+        d.bbox    = cv::Rect2f(
+            static_cast<float>(r.x),
+            static_cast<float>(r.y),
+            static_cast<float>(r.width),
+            static_cast<float>(r.height)
+        );
+        out.push_back(d);
+    }
+
     return out;
 }
 

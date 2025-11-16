@@ -63,8 +63,11 @@ void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){
 bool EO_ArUcoThread::is_big_enough(int bw, int bh) const {
     
     // 절대 기준
-    bool big_abs = (bw >= cfg_.guidance.min_bbox_w) &&
-                   (bh >= cfg_.guidance.min_bbox_h);
+    // bool big_abs = (bw >= cfg_.guidance.min_bbox_w) &&
+    //                (bh >= cfg_.guidance.min_bbox_h);
+
+    bool big_abs = (bw >= 140) &&
+                   (bh >= 140);
 
     // (선택) 비율 기준
     bool big_frac = false;
@@ -231,7 +234,7 @@ void EO_ArUcoThread::emit_aruco(int id,
     }
 
     // 이벤트 버스로 전달
-    ArucoEvent a{ id, corners, box, ts_ns };
+    ArucoEvent a{ id, corners, box, ts_ns};
     Event ev{ EventType::Aruco, a };
     bus_.push(ev, Topic::Aruco);
 
