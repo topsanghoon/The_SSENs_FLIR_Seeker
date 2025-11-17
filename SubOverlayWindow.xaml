@@ -1,0 +1,10 @@
+﻿<Window x:Class="TheSSENS.SubOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStyle="None"
+        ShowInTaskbar="False"
+        Topmost="True">
+    <Canvas Name="OverlayCanvas" Background="#01FFFFFF" MouseLeftButtonDown="OverlayCanvas_MouseLeftButtonDown"/>
+</Window>

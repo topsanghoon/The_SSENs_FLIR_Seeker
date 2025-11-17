@@ -1,0 +1,491 @@
+﻿<Window x:Class="TheSSENS.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:wf="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
+        xmlns:mywf="clr-namespace:TheSSENS"
+        xmlns:gmap="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
+        xmlns:gmapcore="clr-namespace:GMap.NET.MapProviders;assembly=GMap.NET.Core"
+        Focusable="True"
+        FocusManager.FocusedElement="{Binding RelativeSource={RelativeSource Self}}"
+        Title="Cruise Missile Control GUI" Height="600" Width="1000"
+        ContentRendered="Window_ContentRendered" Closing="Window_Closing"
+        KeyDown="Window_KeyDown">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="windowback" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="inerback" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="inerbtn" Color="Gray"/>
+        <SolidColorBrush x:Key="inerindex" Color="White"/>
+        <SolidColorBrush x:Key="btnindex" Color="Lime"/>
+        <SolidColorBrush x:Key="side" Color="White"/>
+        <SolidColorBrush x:Key="sidebtn" Color="Gray"/>
+        <SolidColorBrush x:Key="scroll" Color="Yellow"/>
+
+        <!-- 수직 스크롤바 스타일 -->
+        <Style x:Key="VerticalScrollProgressBarStyle" TargetType="ProgressBar">
+            <Setter Property="Foreground" Value="{StaticResource scroll}" />
+            <Setter Property="Background" Value="{StaticResource inerback}" />
+            <Setter Property="BorderBrush" Value="{StaticResource side}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Orientation" Value="Vertical" />
+        </Style>
+
+        <!-- 버튼 스타일 (음영/클릭 효과) -->
+        <Style x:Key="ClickableButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource inerbtn}"/>
+            <Setter Property="Foreground" Value="{StaticResource btnindex}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource inerbtn}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <!-- Border  -->
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+
+                            <!-- 음영 (그림자) 효과 -->
+                            <Border.Effect>
+                                <DropShadowEffect Color="Black" Opacity="1" BlurRadius="5" ShadowDepth="5" />
+                            </Border.Effect>
+
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- 마우스를 올렸을 때 (Hover) -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{StaticResource btnindex}"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{StaticResource scroll}"/>
+                                <Setter Property="Foreground" Value="{StaticResource inerback}"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                            </Trigger>
+                            <!-- 클릭했을 때 (Pressed) -->
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{StaticResource inerindex}"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{StaticResource btnindex}"/>
+                                <Setter Property="Foreground" Value="{StaticResource inerback}"/>
+                                <!-- 눌리는 효과 -->
+                                <Setter Property="Padding" Value="6,7,4,3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!--  표적 지정 활성화 스타일 -->
+        <Style x:Key="ClickableButtonActiveStyle" TargetType="Button" BasedOn="{StaticResource ClickableButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource btnindex}"/>
+            <Setter Property="Foreground" Value="{StaticResource inerback}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource scroll}"/>
+        </Style>
+
+        <!-- 자폭(ST) 버튼 스타일 (빨간색) -->
+        <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource ClickableButtonStyle}">
+            <!-- 기본 상태 (빨간색) -->
+            <Setter Property="Background" Value="#660000"/>
+            <Setter Property="BorderBrush" Value="#FF4444"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3">
+                            <Border.Effect>
+                                <DropShadowEffect Color="Black" Opacity="1" BlurRadius="5" ShadowDepth="5" />
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- 마우스 올리면 밝은 빨간색 -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#FF4444"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="White"/>
+                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                            </Trigger>
+                            <!-- 클릭하면 더 밝은 빨간색 -->
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#FF8888"/>
+                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter Property="Padding" Value="6,7,4,3"/>
+                            </Trigger>
+                            <!--  비활성화 (토글 Off) 상태 스타일 -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#440000"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#885555"/>
+                                <Setter Property="Foreground" Value="#AAA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 토글 스위치 스타일 (안전 커버 모양) -->
+        <Style x:Key="SafetyToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#550000"/>
+            <Setter Property="BorderBrush" Value="#FF4444"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Width" Value="40"/>
+            <!-- 너비 살짝 증가 -->
+            <Setter Property="Height" Value="Auto"/>
+            <!-- 높이를 자동으로 -->
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <!-- 버튼 높이에 맞게 늘어남 -->
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Cover" Background="{TemplateBinding Background}" 
+                            BorderBrush="{TemplateBinding BorderBrush}" 
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3" >
+                            <TextBlock x:Name="ToggleText" Text="OFF" Foreground="White" 
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                   FontWeight="Bold" FontSize="10"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- 체크됨 (ON) 상태 -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Cover" Property="Background" Value="Lime"/>
+                                <Setter TargetName="Cover" Property="BorderBrush" Value="White"/>
+                                <Setter TargetName="ToggleText" Property="Text" Value="ON"/>
+                                <Setter TargetName="ToggleText" Property="Foreground" Value="Black"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Background="{StaticResource windowback}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="125*"/>
+        </Grid.ColumnDefinitions>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="375*"/>
+            <RowDefinition Height="225*"/>
+        </Grid.RowDefinitions>
+
+        <Border x:Name="LeftBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" BorderThickness="5" BorderBrush="{StaticResource side}" Margin="5">
+            <WindowsFormsHost Name="videoHostLeft">
+                <mywf:DbPanel x:Name="videoPanelLeft" BackColor="Black"/>
+            </WindowsFormsHost>
+        </Border>
+
+        <Border x:Name="RightBorder" Grid.Row="0" Grid.Column="4" Grid.ColumnSpan="4" BorderThickness="5" BorderBrush="{StaticResource side}" Margin="5">
+            <WindowsFormsHost Name="videoHostRight">
+                <mywf:DbPanel x:Name="videoPanelRight" BackColor="Black"/>
+            </WindowsFormsHost>
+        </Border>
+
+        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="5">
+
+            <!-- 1. 기존 지도 (테두리 포함) -->
+            <Border BorderBrush="{StaticResource side}" BorderThickness="3" Padding="0">
+                <gmap:GMapControl x:Name="MapControl"
+                          MinHeight="300"
+                          CanDragMap="True"
+                          MouseWheelZoomType="MousePositionAndCenter"
+                          Zoom="12"
+                          MinZoom="2"
+                          MaxZoom="22"/>
+            </Border>
+
+            <!-- 2. [추가] 소요 시간 표시 (반투명 흰색 배경 + 검은색 텍스트) -->
+            <Border HorizontalAlignment="Center" 
+            VerticalAlignment="Top" 
+            Margin="10" 
+            Padding="5,2"
+            CornerRadius="3"
+            Background="#AAFFFFFF">
+                <!-- 반투명 흰색 배경 -->
+                <TextBlock x:Name="MissionTimeText"
+                   Text="00:00:00"
+                   Foreground="Black"
+                   FontFamily="Consolas"
+                   FontSize="16"
+                   FontWeight="Bold"/>
+            </Border>
+
+            <!-- 유도 상태 표시 (Top-Left) -->
+            <Border HorizontalAlignment="Left" 
+                    VerticalAlignment="Top" 
+                    Margin="10" 
+                    Padding="5,2"
+                    CornerRadius="3"
+                    Background="#AAFFFFFF">
+                <!-- 반투명 흰색 배경 -->
+                <TextBlock x:Name="GuidanceModeText"
+                           Text="대기"
+                           Foreground="Black"
+                           FontFamily="Consolas"
+                           FontSize="16"
+                           FontWeight="Bold"/>
+            </Border>
+            
+        </Grid>
+
+        <!-- 요청사항이 반영된 기체 정보 패널 -->
+        <Border Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2"
+        BorderBrush="{StaticResource side}" BorderThickness="3" Margin="5" Padding="5">
+            <Grid Background="{StaticResource inerback}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*"/>
+                    <ColumnDefinition Width="2.7*"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3*"/>
+                    <RowDefinition Height="2*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Column="0" Grid.Row="1" Orientation="Vertical" VerticalAlignment="Top" Margin="5,0,5,0">
+                    <Border BorderBrush="{StaticResource side}" BorderThickness="1" Margin="0,3,0,3">
+                        <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="3">
+                            <TextBlock Text="미익 1" Foreground="{StaticResource inerindex}" FontSize="9" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="MotorValue1" Text="0" Foreground="{StaticResource inerindex}" TextAlignment="Center" FontWeight="Bold" FontSize="18" Padding="5"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border BorderBrush="{StaticResource side}" BorderThickness="1" Margin="0,3,0,0">
+                        <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="3">
+                            <TextBlock Text="미익 3" Foreground="{StaticResource inerindex}" FontSize="9" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="MotorValue3" Text="0" Foreground="{StaticResource inerindex}" TextAlignment="Center" FontWeight="Bold" FontSize="18" Padding="5"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <Border Grid.Column="1" 
+                Grid.Row="0"
+                Grid.RowSpan="2">
+
+                    <Image x:Name="AircraftImage" Source="\Images\missile2.png" Stretch="Uniform"/>
+                </Border>
+
+                <StackPanel Grid.Column="2" Grid.Row="1" Orientation="Vertical" VerticalAlignment="Top" Margin="5,0,5,0">
+                    <Border BorderBrush="{StaticResource side}" BorderThickness="1" Margin="0,3,0,3">
+                        <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="3">
+                            <TextBlock Text="미익 2" Foreground="{StaticResource inerindex}" FontSize="9" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="MotorValue2" Text="0" Foreground="{StaticResource inerindex}" TextAlignment="Center" FontWeight="Bold" FontSize="18" Padding="5"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border BorderBrush="{StaticResource side}" BorderThickness="1" Margin="0,3,0,0">
+                        <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="3">
+                            <TextBlock Text="미익 4" Foreground="{StaticResource inerindex}" FontSize="9" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="MotorValue4" Text="0" Foreground="{StaticResource inerindex}" TextAlignment="Center" FontWeight="Bold" FontSize="18" Padding="5"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2"
+    BorderBrush="{StaticResource side}" BorderThickness="3" Margin="5" Padding="5">
+            <Grid Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*"/>
+                    <ColumnDefinition Width="1.1*"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="1.5*"/>
+                    <RowDefinition Height="1*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Column="0" Grid.Row="0" 
+                            Orientation="Vertical" 
+                            VerticalAlignment="Top" 
+                            Margin="5,5,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="StatusIndicatorCircle_1"
+                            Width="12" Height="12"
+                            Fill="Red"
+                            Stroke="Black" StrokeThickness="1"
+                            VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusIndicatorText_1"
+                            Text="통신 상태"
+                            Foreground="White"
+                            FontSize="10"
+                            FontWeight="Bold"
+                            Margin="5,0,0,0"
+                            VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="0" Grid.Row="0" 
+            Orientation="Horizontal" 
+            HorizontalAlignment="Left" 
+            VerticalAlignment="Top" 
+            Margin="5,25,0,0">
+                    <Ellipse x:Name="FlyStatusIndicatorCircle_Mid" 
+             Width="12" Height="12" 
+             Fill="GreenYellow"  
+             Stroke="Black" StrokeThickness="1"
+             VerticalAlignment="Center"/>
+                    <TextBlock x:Name="FlyStatusIndicatorText_Mid" 
+               Text="중기 유도" 
+               Foreground="White" 
+               FontSize="10" 
+               FontWeight="Bold"
+               Margin="5,0,0,0" 
+               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="0" Grid.Row="0" 
+                        Orientation="Horizontal" 
+                        HorizontalAlignment="Left" 
+                        VerticalAlignment="Top" 
+                        Margin="5,45,0,0">
+                    <Ellipse x:Name="FlyStatusIndicatorCircle_End" 
+                         Width="12" Height="12" 
+                         Fill="Red"  
+                         Stroke="Black" StrokeThickness="1"
+                         VerticalAlignment="Center"/>
+                    <TextBlock x:Name="FlyStatusIndicatorText_End" 
+                           Text="종말 유도" 
+                           Foreground="White" 
+                           FontSize="10" 
+                           FontWeight="Bold"
+                           Margin="5,0,0,0" 
+                           VerticalAlignment="Center"/>
+                </StackPanel>
+                
+                <Grid Grid.Column="0" Grid.Row="0" VerticalAlignment="Stretch" Margin="5,5,5,5" HorizontalAlignment="Right">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="8*"/>
+                        <RowDefinition/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ProgressBar x:Name="Scroll_1Bar" Grid.Row="0" Width="10" Value="50" Minimum="0" Maximum="100"
+         Style="{StaticResource VerticalScrollProgressBarStyle}" 
+         Margin="12,2,12,15" Grid.RowSpan="3"/>
+                    <TextBlock Grid.Row="2" Text="스크롤 1" Foreground="{StaticResource inerindex}" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                </Grid>
+
+                <Grid Grid.Column="2" Grid.Row="0" VerticalAlignment="Stretch" Margin="5,5,5,5" HorizontalAlignment="Left">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ProgressBar x:Name="Scroll_2Bar" Grid.Row="0" Width="10" Value="50" Minimum="0" Maximum="100"
+         Style="{StaticResource VerticalScrollProgressBarStyle}" 
+         Margin="0,2,0,0" VerticalAlignment="Stretch"/>
+                    <TextBlock Grid.Row="1" Text="스크롤 2" Foreground="{StaticResource inerindex}" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Grid.Column="4" HorizontalAlignment="Stretch">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="1*"/>
+                <RowDefinition Height="1*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" BorderBrush="{StaticResource side}" BorderThickness="3" Margin="5" Background="{StaticResource inerback}">
+                <Grid>
+                    <UniformGrid x:Name="ScenarioSelectionGrid" Rows="3" Columns="1" Margin="5">
+                        <Button x:Name="Scenario1Button" Margin="2" Style="{StaticResource ClickableButtonStyle}" Click="Scenario1_Click">
+                            <TextBlock Text="시나리오 1: 평양 타격" FontSize="12" FontWeight="Bold"/>
+                        </Button>
+                        <Button x:Name="Scenario2Button" Margin="2" Style="{StaticResource ClickableButtonStyle}" Click="Scenario2_Click">
+                            <TextBlock Text="시나리오 2: 동해 기지 타격" FontSize="12" FontWeight="Bold"/>
+                        </Button>
+                        <Button x:Name="Scenario3Button" Margin="2" Style="{StaticResource ClickableButtonStyle}" Click="Scenario3_Click">
+                            <TextBlock Text="시나리오 3: 방공망 회피" FontSize="12" FontWeight="Bold"/>
+                        </Button>
+                    </UniformGrid>
+
+                    <!-- 시나리오 진행 뷰 -->
+                    <Grid x:Name="ScenarioInProgressGrid" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock x:Name="MissionDetailsText" Grid.Row="0" 
+                                   Text="시나리오 1 진행 중..." 
+                                   Foreground="{StaticResource inerindex}" 
+                                   FontSize="14" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" Margin="5"/>
+
+                        <Button x:Name="StartMissionButton" Grid.Row="1" Content="임무 시작" 
+                                Style="{StaticResource ClickableButtonStyle}" 
+                                Height="30" Margin="5" Click="StartMission_Click"/>
+
+                        <Button x:Name="AbortMissionButton" Grid.Row="1" Content="임무 종료" 
+                                Style="{StaticResource DangerButtonStyle}" 
+                                Height="30" Margin="5" Click="AbortMission_Click"
+                                Visibility="Collapsed"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" BorderBrush="{StaticResource side}" BorderThickness="3" Margin="4" Background="{StaticResource inerback}">
+                <UniformGrid Rows="3" Columns="1" Margin="3">
+
+                    <Button Name="DES" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="DES_Click">
+                        <Viewbox>
+                            <TextBlock Text="표적 지정" FontWeight="Bold" Margin="2"/>
+                        </Viewbox>
+                    </Button>
+                    <Button Name="SD" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="SD_Click">
+                        <Viewbox>
+                            <TextBlock Text="영상 필터" FontWeight="Bold" Margin="2"/>
+                        </Viewbox>
+                    </Button>
+
+                    <Grid Margin="5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Name="ST" Margin="0,0,5,0" 
+                                Style="{StaticResource DangerButtonStyle}" 
+                                Click="ST_Click"
+                                IsEnabled="{Binding ElementName=ArmSelfDestructToggle, Path=IsChecked}">
+                            <Viewbox>
+                                <TextBlock Text="자폭" FontWeight="Bold" Margin="2"/>
+                            </Viewbox>
+                        </Button>
+
+                        <ToggleButton Grid.Column="1" 
+                                        x:Name="ArmSelfDestructToggle" 
+                                        Style="{StaticResource SafetyToggleStyle}"/>
+                    </Grid>
+                </UniformGrid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="1" Grid.Column="5" Grid.ColumnSpan="3" BorderBrush="{StaticResource side}" BorderThickness="1" Background="{StaticResource inerback}" Margin="5">
+            <ScrollViewer Name="LogScrollViewer" VerticalScrollBarVisibility="Auto">
+                <TextBlock Name="LogBox" Foreground="{StaticResource btnindex}" FontFamily="Consolas" TextWrapping="Wrap" Margin="5" FontSize ="20"/>
+            </ScrollViewer>
+        </Border>
+        
+    </Grid>
+</Window>
+
