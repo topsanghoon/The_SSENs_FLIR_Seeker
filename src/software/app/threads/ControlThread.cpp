@@ -42,6 +42,11 @@ void ControlThread::start() {
 
     CSV_LOG_SIMPLE("Ctrl", "THREAD_START", 0, 0,0,0,0, "");
 
+        // ★ 프로그램 시작 직후 UART로 값 108 전송
+                              // uart_ 포인터가 존재한다면
+    act_.send_start_signal();        // 위에서 만든 전용 함수
+    
+
     // ★ 프로그램 시작 신호 전송 (예: 8001)
     const uint64_t ts = flir::now_ns_steady();
     CtrlCmd start_cmd = CtrlCmd::make_start_signal(); // 커스텀 함수로 8001 생성
@@ -51,6 +56,7 @@ void ControlThread::start() {
 
 void ControlThread::stop() {
     if (!running_.load()) return;
+    act_.stop_io();
     running_.store(false);
     {
         std::lock_guard<std::mutex> lk(m_);

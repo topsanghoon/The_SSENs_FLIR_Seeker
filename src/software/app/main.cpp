@@ -82,7 +82,7 @@ int main(int, char**) {
         // EO 송출
         app->eo_tx.frame = {320,240};
         app->eo_tx.fps = 30;
-        app->eo_tx.jpeg_quality = 60;
+        app->eo_tx.jpeg_quality = 80;
         app->eo_tx.dst = {"192.168.0.250", 5003};
 
         // IR 송출 (Lepton 2.5)
@@ -102,8 +102,8 @@ int main(int, char**) {
 
         // 유도 파라미터
         app->guidance.terminal_marker_id = 3;
-        app->guidance.min_bbox_w = 100;
-        app->guidance.min_bbox_h = 100;
+        app->guidance.min_bbox_w = 120;
+        app->guidance.min_bbox_h = 120;
         app->guidance.min_big_frames = 5;
         app->guidance.hold_big_ms = 300;
         app->guidance.min_bbox_frac = 0.0f;

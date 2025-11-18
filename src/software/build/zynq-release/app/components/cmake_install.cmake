@@ -1,4 +1,4 @@
-# Install script for directory: /home/user/Desktop/The_SSENs_FLIR_Seeker/src/software/app/components
+# Install script for directory: /home/user/project_dir/The_SSENs_FLIR_Seeker/src/software/app/components
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,6 +39,6 @@ endif()
 
 # Set default install directory permissions.
 if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/opt/petalinux/2022.1/sysroots/x86_64-petalinux-linux/usr/bin/arm-xilinx-linux-gnueabi/arm-xilinx-linux-gnueabi-objdump")
+  set(CMAKE_OBJDUMP "/home/user/petalinux-sdk/sysroots/x86_64-petalinux-linux/usr/bin/arm-xilinx-linux-gnueabi/arm-xilinx-linux-gnueabi-objdump")
 endif()
 

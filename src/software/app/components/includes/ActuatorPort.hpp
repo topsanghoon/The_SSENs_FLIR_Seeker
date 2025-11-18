@@ -12,6 +12,7 @@ public:
     virtual void write_nonblock(const CtrlCmd& cmd) = 0;
     virtual void set_quiesce(bool q) = 0;
     virtual void stop_io() = 0;
+    virtual void send_start_signal() = 0;
 };
 
 class UART_ActuatorPort : public IActuatorPort {
@@ -22,6 +23,7 @@ public:
     void write_nonblock(const CtrlCmd& cmd) override;
     void set_quiesce(bool q) override;
     void stop_io() override;
+    void send_start_signal() override;
 
 private:
     int fd_{-1};

@@ -66,8 +66,8 @@ bool EO_ArUcoThread::is_big_enough(int bw, int bh) const {
     // bool big_abs = (bw >= cfg_.guidance.min_bbox_w) &&
     //                (bh >= cfg_.guidance.min_bbox_h);
 
-    bool big_abs = (bw >= 140) &&
-                   (bh >= 140);
+    bool big_abs = (bw >= cfg_.guidance.min_bbox_w) &&
+                   (bh >= cfg_.guidance.min_bbox_h);
 
     // (선택) 비율 기준
     bool big_frac = false;
@@ -139,7 +139,7 @@ void EO_ArUcoThread::run() {
                     for (auto& d : detections) {
                         if(toFindAruco == d.id) {
                             emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq);
-                            if(is_big_enough(static_cast<int>(d.bbox.width), static_cast<int>(d.bbox.height))) {
+                            if(toFindAruco != 3 && is_big_enough(static_cast<int>(d.bbox.width), static_cast<int>(d.bbox.height))) {
                                 toFindAruco++;
                             }
                         }

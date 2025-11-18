@@ -127,4 +127,17 @@ void UART_ActuatorPort::stop_io() {
     CSV_LOG_SIMPLE(TAG, "STOP_IO", 0, (double)stop_val, 0,0,0, "");
 }
 
+void UART_ActuatorPort::send_start_signal() {
+    if (fd_ == -1) {
+        CSV_LOG_SIMPLE("UART", "START_IO_SKIP", 0, 0,0,0,0, "fd<0");
+        return;
+    }
+    int desired = 109;
+    int8_t val = clamp_to_i8(desired);
+
+    ssize_t n = ::write(fd_, &val, sizeof(val));
+    CSV_LOG_SIMPLE("UART", "START_IO", (double)val, 0,0,0,0, "");
+}
+
+
 } // namespace flir
