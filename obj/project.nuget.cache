@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "NJDu2t0Xp2I=",
+  "dgSpecHash": "zrGobdVcIQ8=",
   "success": true,
-  "projectFilePath": "C:\\workspace\\GUI\\SSNE GUI v2\\SSNE GUI v2.csproj",
+  "projectFilePath": "C:\\workspace\\GUI2\\The_SSENs_FLIR_Seeker\\SSNE GUI v2.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\DSO21\\.nuget\\packages\\giosharp\\3.22.25.74\\giosharp.3.22.25.74.nupkg.sha512",
     "C:\\Users\\DSO21\\.nuget\\packages\\glibsharp\\3.22.25.74\\glibsharp.3.22.25.74.nupkg.sha512",

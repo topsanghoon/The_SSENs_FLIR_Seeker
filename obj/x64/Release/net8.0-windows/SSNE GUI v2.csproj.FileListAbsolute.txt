@@ -425,3 +425,89 @@ C:\workspace\GUI\SSNE GUI v2\obj\x64\Release\net8.0-windows\refint\SSNE GUI v2.d
 C:\workspace\GUI\SSNE GUI v2\obj\x64\Release\net8.0-windows\SSNE GUI v2.pdb
 C:\workspace\GUI\SSNE GUI v2\obj\x64\Release\net8.0-windows\SSNE GUI v2.genruntimeconfig.cache
 C:\workspace\GUI\SSNE GUI v2\obj\x64\Release\net8.0-windows\ref\SSNE GUI v2.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SSNE GUI v2.exe
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SSNE GUI v2.deps.json
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SSNE GUI v2.runtimeconfig.json
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SSNE GUI v2.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SSNE GUI v2.pdb
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\GioSharp.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\GLibSharp.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\GMap.NET.Core.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\GMap.NET.WindowsPresentation.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\gstreamer-sharp-netcore.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\Newtonsoft.Json.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\OpenCvSharp.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\OpenCvSharp.Extensions.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SQLitePCLRaw.batteries_v2.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SQLitePCLRaw.core.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\SQLitePCLRaw.provider.e_sqlite3.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\System.Data.SqlClient.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\System.Data.SQLite.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\System.Drawing.Common.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x64\native\OpenCvSharpExtern.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x64\native\opencv_videoio_ffmpeg4110_64.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x86\native\OpenCvSharpExtern.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x86\native\opencv_videoio_ffmpeg4110.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-arm64\native\sni.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x64\native\sni.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x86\native\sni.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\android-arm\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\android-arm64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\android-x64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\android-x86\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\browser-wasm\nativeassets\net8.0\e_sqlite3.a
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\ios-arm\native\e_sqlite3.a
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\ios-arm64\native\e_sqlite3.a
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\iossimulator-arm64\native\e_sqlite3.a
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\iossimulator-x64\native\e_sqlite3.a
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\iossimulator-x86\native\e_sqlite3.a
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-arm\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-arm64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-armel\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-mips64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-musl-arm\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-musl-arm64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-musl-riscv64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-musl-s390x\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-musl-x64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-ppc64le\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-riscv64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-s390x\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-x64\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-x86\native\libe_sqlite3.so
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\maccatalyst-arm64\native\libe_sqlite3.dylib
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\maccatalyst-x64\native\libe_sqlite3.dylib
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\osx-arm64\native\libe_sqlite3.dylib
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\osx-x64\native\libe_sqlite3.dylib
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-arm64\native\e_sqlite3.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x64\native\e_sqlite3.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x86\native\e_sqlite3.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\linux-x64\native\SQLite.Interop.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\osx-x64\native\SQLite.Interop.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x64\native\SQLite.Interop.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win-x86\native\SQLite.Interop.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\unix\lib\netcoreapp2.1\System.Data.SqlClient.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\bin\x64\Release\net8.0-windows\runtimes\win\lib\netcoreapp2.1\System.Data.SqlClient.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.csproj.AssemblyReference.cache
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SubOverlayWindow.baml
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\GraphicOverlayWindow.g.cs
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\MainWindow.g.cs
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SubOverlayWindow.g.cs
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\App.g.cs
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\GeneratedInternalTypeHelper.g.cs
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2_MarkupCompile.cache
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2_MarkupCompile.lref
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\GraphicOverlayWindow.baml
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\MainWindow.baml
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.g.resources
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.GeneratedMSBuildEditorConfig.editorconfig
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.AssemblyInfoInputs.cache
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.AssemblyInfo.cs
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.csproj.CoreCompileInputs.cache
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.sourcelink.json
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI.04088875.Up2Date
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\refint\SSNE GUI v2.dll
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.pdb
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\SSNE GUI v2.genruntimeconfig.cache
+C:\workspace\GUI2\The_SSENs_FLIR_Seeker\obj\x64\Release\net8.0-windows\ref\SSNE GUI v2.dll

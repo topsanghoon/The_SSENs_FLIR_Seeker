@@ -110,6 +110,14 @@ namespace TheSSENS
 
         private readonly StringBuilder _logBuf = new();
         private long _lastFlushMs = 0;
+
+        // [FPS 측정용 변수 추가]
+        private int _framesLeft = 0;
+        private int _framesRight = 0;
+        private double _fpsLeft = 0.0;
+        private double _fpsRight = 0.0;
+        private long _lastTimeLeft = 0;
+        private long _lastTimeRight = 0;
         private static long NowMs() => Stopwatch.GetTimestamp() * 1000 / Stopwatch.Frequency;
 
         // ===== 실행 초기값 =====
@@ -193,12 +201,29 @@ namespace TheSSENS
                     _isHbConnected = false; // 플래그를 false로
                     UpdateConnectionStatus(_isHbConnected);
                     _hbClock.Stop(); // 스톱워치 중지
-
+                    DisableFlyStatusMid();
+                    DisableFlyStatusEnd();
                     AppendLog("[SYSTEM] HB 수신 중단 (Timeout)");
                 }
             };
         }
 
+        private void ZoomInMap()
+        {
+            MapControl.Zoom = 8;
+            MapControl.MinZoom = 8;
+            MapControl.MaxZoom = 8;
+            MapControl.ShowCenter = false;
+            MapControl.CanDragMap = true;
+        }
+        private void ZoomOutMap()
+        {
+            MapControl.Zoom = 6;
+            MapControl.MinZoom = 6;
+            MapControl.MaxZoom = 6;
+            MapControl.ShowCenter = false;
+            MapControl.CanDragMap = true;
+        }
         // ===== 실시간 초기화 =====
         private void Window_ContentRendered(object sender, EventArgs e)
         {
@@ -334,6 +359,8 @@ namespace TheSSENS
 
         private void VideoPanelLeft_Paint(object? sender, PaintEventArgs e)
         {
+
+
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
@@ -347,6 +374,14 @@ namespace TheSSENS
             var dest = new Rectangle(0, 0, videoPanelLeft.Width, videoPanelLeft.Height);
             g.DrawImage(bmp, dest, new Rectangle(0, 0, bmp.Width, bmp.Height), GraphicsUnit.Pixel);
             bmp.Dispose();
+
+            // [FPS 텍스트 그리기]
+            using (var font = new Font("Consolas", 12, System.Drawing.FontStyle.Bold))
+            using (var brush = new SolidBrush(Color.LimeGreen)) // 잘 보이게 라임색
+            {
+                string fpsText = $"IR FPS: {_fpsLeft:F1}"; // 소수점 1자리까지 표시
+                g.DrawString(fpsText, font, brush, new PointF(5, 5));
+            }
 
             if (_hasBox)
             {
@@ -373,7 +408,7 @@ namespace TheSSENS
 
 
                 g.DrawPath(pen, path);
-               
+
             }
         }
 
@@ -435,6 +470,14 @@ namespace TheSSENS
                 GraphicsUnit.Pixel
             );
             bmp.Dispose();
+
+            // [FPS 텍스트 그리기]
+            using (var font = new Font("Consolas", 12, System.Drawing.FontStyle.Bold))
+            using (var brush = new SolidBrush(Color.LimeGreen))
+            {
+                string fpsText = $"EO FPS: {_fpsRight:F1}";
+                g.DrawString(fpsText, font, brush, new PointF(5, 5));
+            }
 
             if (_arucoHas && _eoSrcW > 0 && _eoSrcH > 0)
             {
@@ -547,7 +590,6 @@ namespace TheSSENS
         // ===== 목표 지정 버튼 =====
         private void DES_Click(object sender, RoutedEventArgs e)
         {
-            //now_id = 1;
             if (desMode)
             {
                 desMode = false;
@@ -652,34 +694,10 @@ namespace TheSSENS
         private void SD_Click(object sender, RoutedEventArgs e)
         {
             AppendLog($"[{System.DateTime.Now:HH:mm:ss}] [INFO] 필터 전환");
-            temp++;
 
             int newIndex = temp % 4;
             if (_isLeftSignalActive) _leftImageOverlay?.UpdateImage(newIndex);
             if (_isRightSignalActive) _rightImageOverlay?.UpdateImage(newIndex);
-
-            //int newStatus = temp % 3;
-            //UpdateConnectionStatus(newStatus);
-
-            // ==== 여기부터 테스트 이동 ====
-            int leg = _currentWaypointIndex;
-            if (_waypoints == null || leg >= (_waypoints?.Count ?? 0) || _legExternalTotal.Count == 0) return;
-
-            double total = _legExternalTotal[leg];
-            if (_testRemain < 0) _testRemain = total;     // 첫 클릭 시 초기화
-
-            double step = total * 0.2;                   // 20%씩 가까워지기
-            _testRemain = Math.Max(0, _testRemain - step);
-
-            //ApplyExternalRange((float)_testRemain);
-
-            AppendLog($"[DEBUG] SD: leg={leg}, remain={_testRemain:F1}/{total:F1} (p={1.0 - _testRemain / total:P0})");
-
-            // 도달해서 다음 레그로 넘어갔으면 다음 클릭 때 새 총길이로 자동 재초기화
-            if (_currentWaypointIndex != leg) _testRemain = -1;
-            // ==== 테스트 이동 끝 ====
-
-            //AppendLog($"[DEBUG] 통신 상태 : {newStatus}");
         }
 
         // ====== 로그 출력 ======
@@ -706,11 +724,9 @@ namespace TheSSENS
         // ====== [추가] 시나리오 버튼 클릭 이벤트 ======
         private void Scenario1_Click(object sender, RoutedEventArgs e)
         {
-            _selectedScenarioId = 1; // [신규]
-            StartSimulation(_selectedScenarioId); // 맵 '준비'만 실행
-            SetScenarioUIState(true, "시나리오 1 시작 대기"); // [수정] 텍스트 변경
-
-            // [신규] 버튼 상태 설정
+            _selectedScenarioId = 1;
+            StartSimulation(_selectedScenarioId);
+            SetScenarioUIState(true, "시나리오 1 시작 대기");
             StartMissionButton.Visibility = Visibility.Visible;
             AbortMissionButton.Visibility = Visibility.Collapsed;
         }
@@ -722,6 +738,7 @@ namespace TheSSENS
             SetScenarioUIState(true, "시나리오 2 시작 대기");
             StartMissionButton.Visibility = Visibility.Visible;
             AbortMissionButton.Visibility = Visibility.Collapsed;
+
         }
 
         private void Scenario3_Click(object sender, RoutedEventArgs e)
@@ -736,6 +753,7 @@ namespace TheSSENS
         private void AbortMission_Click(object sender, RoutedEventArgs e)
         {
             AppendLog("[WARN] 임무 수동 종료.");
+            ZoomInMap();
             StopSimulation(); // 3. Map.cs의 시뮬레이션 종료
             // SetScenarioUIState(false, null); // [주석] StopSimulation이 내부적으로 SetScenarioUIState를 호출합니다.
         }
@@ -743,7 +761,7 @@ namespace TheSSENS
         private void StartMission_Click(object sender, RoutedEventArgs e)
         {
             ExecuteSimulationStart(); // 분리했던 '시작' 로직 호출
-
+            ZoomInMap();
             // 버튼 상태 변경 (시작 -> 종료)
             StartMissionButton.Visibility = Visibility.Collapsed;
             AbortMissionButton.Visibility = Visibility.Visible;
@@ -757,12 +775,14 @@ namespace TheSSENS
         {
             if (isRunning)
             {
+                ZoomInMap();
                 ScenarioSelectionGrid.Visibility = Visibility.Collapsed;
                 ScenarioInProgressGrid.Visibility = Visibility.Visible;
                 MissionDetailsText.Text = missionText;
             }
             else
             {
+                ZoomOutMap();
                 ScenarioSelectionGrid.Visibility = Visibility.Visible;
                 ScenarioInProgressGrid.Visibility = Visibility.Collapsed;
                 _selectedScenarioId = 0;

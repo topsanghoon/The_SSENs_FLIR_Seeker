@@ -61,7 +61,7 @@ namespace TheSSENS {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/SSNE GUI v2;component/suboverlaywindow.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/SSNE GUI v2;V1.0.0.0;component/suboverlaywindow.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\SubOverlayWindow.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);

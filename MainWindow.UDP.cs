@@ -145,6 +145,7 @@ namespace TheSSENS
                                 }
                             case 9001:
                                 {
+                                    FinalHoming(10.0f);
                                     DisableFlyStatusMid();
                                     EnableFlyStatusEnd();
 
@@ -223,7 +224,7 @@ namespace TheSSENS
                         float h = ReadF32LE(buf, p + off + 12);
 
                         now_id = id;
-                        ApplyExternalRange(OutRange(h) - 35.0f);
+                        ApplyExternalRange(OutRange(h)); // 약 35(최대) 이하 부터는 탐지 못함
 
                         AppendLog($"[META][ARUCO] id={id} ts={ts} box=({x:F1},{y:F1},{w:F1},{h})");
                         break;

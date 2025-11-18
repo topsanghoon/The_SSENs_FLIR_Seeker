@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SSNE GUI v2")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dc784bd19b9d85602be4b67936cc23eed31ee967")]
 [assembly: System.Reflection.AssemblyProductAttribute("SSNE GUI v2")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SSNE GUI v2")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

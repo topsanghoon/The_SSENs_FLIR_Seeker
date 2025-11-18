@@ -46,10 +46,20 @@ namespace TheSSENS
     /// </summary>
     public partial class MainWindow : System.Windows.Window
     {
-        // 마르코 id 관련 신호
+        // 아르코 id 관련 신호
         private bool arriveflag = false;
         private uint prv_id = 0;
-        private float Max_h = 0;
+        private float Max_h = 100;
+        private const double TerminalThreshold = 35.0;   // 35 아래는 고정 속도 구간
+
+        private bool _terminalPhaseActive = false;      // 종말 구간(<=35) 진입 여부
+        private double _virtualRemaining = 0.0;         // 종말 구간에서 사용하는 가상 남은거리
+
+        private double _terminalDurationSec = 3.0;      // 35 → 0 까지 걸리는 시간 (튜닝용)
+        private SysDateTime _terminalStartTime;         // 종말 구간 시작 시각
+        private PointLatLng _terminalFromPos;           // 종말 구간 시작 좌표(거리=35)
+        private PointLatLng _terminalToPos;             // 종말 구간 목표 좌표(WP)
+        private uint _terminalId;                       // 종말 구간 시작 시점의 now_id
 
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
         // ===== 지도/마커 =====
@@ -313,7 +323,7 @@ namespace TheSSENS
                 };
 
                 marker.Shape = img;
-                marker.Offset = new WpfPoint(-12, -12);
+                marker.Offset = new WpfPoint(-20, -20);
                 _waypointMarkers.Add(marker);
                 MapControl.Markers.Add(marker);
             }
@@ -338,7 +348,7 @@ namespace TheSSENS
                     Source = bmp,
                     ToolTip = name
                 };
-                marker.Offset = new WpfPoint(-8, -8);
+                marker.Offset = new WpfPoint(0, 0);
             }
             catch
             {
@@ -351,7 +361,7 @@ namespace TheSSENS
                     FontSize = 16,
                     ToolTip = $"{name} (아이콘 없음)"
                 };
-                marker.Offset = new WpfPoint(-8, -8);
+                marker.Offset = new WpfPoint(0, 0);
             }
             return marker;
         }
@@ -384,24 +394,24 @@ namespace TheSSENS
                 case 1:
 
                     _initialMissileLat = 37.02278; _initialMissileLng = 126.38667;
-                    _waypoints.Add(ParseDmsPoint("37°48'01\"N 124°39'50\"E"));
-                    _waypoints.Add(ParseDmsPoint("37°17'44\"N 121°45'07\"E"));
-                    _waypoints.Add(ParseDmsPoint("38°40'38\"N 127°17'30\"E"));
+                    _waypoints.Add(ParseDmsPoint("37°21'27\"N 125°44'45\"E"));
+                    _waypoints.Add(ParseDmsPoint("37°41'40\"N 125°30'08\"E"));
+                    _waypoints.Add(ParseDmsPoint("37°54'47\"N 125°25'10\"E"));
                     break;
 
                 case 2:
                     _initialMissileLat = 38.25722; _initialMissileLng = 128.48222;
-                    _waypoints.Add(new PointLatLng(39.28222, 129.02861));
-                    _waypoints.Add(new PointLatLng(40.12333, 129.02861));
-                    _waypoints.Add(new PointLatLng(40.45222, 129.03194));
-                    _waypoints.Add(new PointLatLng(40.83906, 128.54198));
+                    _waypoints.Add(ParseDmsPoint("38°41'55\"N 129°16'54\"E"));
+                    _waypoints.Add(ParseDmsPoint("39°21'27\"N 129°06'15\"E"));
+                    _waypoints.Add(ParseDmsPoint("40°04'32\"N 128°34'44\"E"));
+                    _waypoints.Add(ParseDmsPoint("40°13'00\"N 128°18'56\"E"));
                     break;
 
                 case 3:
                     _initialMissileLat = 38.16583; _initialMissileLng = 127.15972;
-                    _waypoints.Add(new PointLatLng(38.45056, 126.53972));
-                    _waypoints.Add(new PointLatLng(38.95000, 126.74333));
-                    _waypoints.Add(new PointLatLng(39.19245, 126.15819));
+                    _waypoints.Add(ParseDmsPoint("38°11'16\"N 126°08'30\"E"));
+                    _waypoints.Add(ParseDmsPoint("38°30'34\"N 126°51'04\"E"));
+                    _waypoints.Add(ParseDmsPoint("38°56'58\"N 125°58'33\"E"));
                     _enemyAAMarkers.Add(CreateAAMarker(new PointLatLng(38.7, 127), "SA-3"));
                     _enemyAAMarkers.Add(CreateAAMarker(new PointLatLng(38.9, 126), "SA-2"));
                     break;
@@ -500,7 +510,12 @@ namespace TheSSENS
             if (_currentWaypointIndex >= _waypoints.Count) return;
             if (arriveflag && prv_id == now_id) return;
 
-            if (prv_id != now_id) Max_h = externalRemaining;
+            // ID 바뀌면 Max_h 갱신 + 종말 구간 강제 종료
+            if (prv_id != now_id)
+            {
+                Max_h = externalRemaining;
+                _terminalPhaseActive = false;
+            }
 
             arriveflag = false;
             prv_id = now_id;
@@ -508,7 +523,21 @@ namespace TheSSENS
             int leg = _currentWaypointIndex;
             double extTotal = Math.Max(1e-6, Max_h);
 
-            // 남은비율 r = remain/total → 진행비율 p = 1 - r
+            // 이미 종말 구간(35~0) 진행 중이면 외부값은 무시
+            if (_terminalPhaseActive)
+            {
+                // 실제 위치 갱신은 타이머에서 UpdateTerminalApproach()가 한다.
+                return;
+            }
+
+            //  35 이하 → 종말 구간 시작 트리거 후 종료
+            if (externalRemaining <= TerminalThreshold)
+            {
+                StartTerminalApproach(extTotal);
+                return;
+            }
+
+            // ===== 여기부터는 기존 "정상 구간(>35)" 보간 로직 =====
             double r = externalRemaining / extTotal;
             if (double.IsNaN(r) || double.IsInfinity(r)) r = 1.0;
             r = Math.Clamp(r, 0.0, 1.0);
@@ -517,20 +546,121 @@ namespace TheSSENS
             var from = GetLegStartPoint(leg);
             var to = _waypoints[leg];
 
-            // 위경도 선형 보간(비율 기반)
             double newLat = from.Lat + (to.Lat - from.Lat) * p;
             double newLng = from.Lng + (to.Lng - from.Lng) * p;
 
             UpdateMissilePosition(newLat, newLng);
             UpdateMapCenter();
             UpdateFlightPathLine();
-
-            if (externalRemaining <= 0.0)
-            {
-                arriveflag = true;
-                MarkWaypointPassedAndAdvance();
-            }
         }
+
+        // ===== 마지막 자동 유도 ui =====
+        public void FinalHoming(double finaltime)
+        {
+            if (_waypoints == null || _waypoints.Count == 0) return;
+            if (_missileMarker == null) return;
+
+            // 목표는 "마지막 웨이포인트"
+            int finalIndex = _waypoints.Count - 1;
+            var finalTarget = _waypoints[finalIndex];
+
+            var fromPos = _missileMarker.Position;
+
+            _currentWaypointIndex = finalIndex;
+
+            _terminalFromPos = fromPos;
+            _terminalToPos = finalTarget;
+            _terminalStartTime = SysDateTime.Now;
+            _terminalDurationSec = finaltime;
+            _terminalId = now_id;
+            _terminalPhaseActive = true;
+
+            UpdateMissilePosition(fromPos.Lat, fromPos.Lng);
+            UpdateMapCenter();
+            UpdateFlightPathLine();
+        }
+
+        /// <summary>
+        /// 종말 구간(거리 35 → 0) 시간 기반 보간 시작.
+        /// extTotal: 현재 leg의 전체 외부 거리(Max_h 기반)
+        /// </summary>
+        private void StartTerminalApproach(double extTotal)
+        {
+            if (_waypoints == null) return;
+            if (_currentWaypointIndex >= _waypoints.Count) return;
+
+            int leg = _currentWaypointIndex;
+
+            var from = GetLegStartPoint(leg);
+            var to = _waypoints[leg];
+
+            // "남은거리 = 35" 시점의 진행비율 p35 계산
+            double r35 = TerminalThreshold / extTotal;     // 남은비율
+            r35 = Math.Clamp(r35, 0.0, 1.0);
+            double p35 = 1.0 - r35;                        // 진행비율
+
+            double lat35 = from.Lat + (to.Lat - from.Lat) * p35;
+            double lng35 = from.Lng + (to.Lng - from.Lng) * p35;
+
+            // 종말 구간 시작/끝 좌표 저장
+            _terminalFromPos = new PointLatLng(lat35, lng35);
+            _terminalToPos = to;
+            _terminalStartTime = SysDateTime.Now;
+            _terminalId = now_id;          // 이때의 ID 기억
+            _terminalPhaseActive = true;
+
+            // 시작할 때 바로 "거리 35 지점"으로 스냅
+            UpdateMissilePosition(lat35, lng35);
+            UpdateMapCenter();
+            UpdateFlightPathLine();
+        }
+
+        /// <summary>
+        /// 종말 구간(35~0)을 시간 기준으로 진행.
+        /// - _terminalDurationSec 동안 From → To 직선 보간
+        /// - now_id가 바뀌면 중간에 즉시 탈출
+        /// - 끝까지 가면 도착 처리 + 다음 웨이포인트 전환
+        /// </summary>
+        private void UpdateTerminalApproach()
+        {
+            if (!_terminalPhaseActive) return;
+            if (_waypoints == null) return;
+            if (_currentWaypointIndex >= _waypoints.Count) return;
+
+            // 새 ID가 잡히면 즉시 탈출
+            if (now_id != _terminalId)
+            {
+                _terminalPhaseActive = false;
+                return;
+            }
+
+            double elapsedSec = (SysDateTime.Now - _terminalStartTime).TotalSeconds;
+            double t = elapsedSec / _terminalDurationSec;  // 0 ~ 1
+
+            if (t >= 1.0)
+            {
+                // 0까지 도달 → 웨이포인트 도착 처리
+                UpdateMissilePosition(_terminalToPos.Lat, _terminalToPos.Lng);
+                UpdateMapCenter();
+                UpdateFlightPathLine();
+
+                arriveflag = true;
+                _terminalPhaseActive = false;
+
+                MarkWaypointPassedAndAdvance();
+                return;
+            }
+
+            t = Math.Clamp(t, 0.0, 1.0);
+
+            double newLat = _terminalFromPos.Lat + (_terminalToPos.Lat - _terminalFromPos.Lat) * t;
+            double newLng = _terminalFromPos.Lng + (_terminalToPos.Lng - _terminalFromPos.Lng) * t;
+
+            UpdateMissilePosition(newLat, newLng);
+            UpdateMapCenter();
+            UpdateFlightPathLine();
+        }
+
 
         /// <summary>
         /// 현재 목표 WP를 회색으로 바꾸고 도달 시간 표시 → 다음 WP로 전환.
@@ -574,7 +704,7 @@ namespace TheSSENS
                 panel.Children.Add(timeText);
 
                 _waypointMarkers[_currentWaypointIndex].Shape = panel;
-                _waypointMarkers[_currentWaypointIndex].Offset = new WpfPoint(-13, -13);
+                _waypointMarkers[_currentWaypointIndex].Offset = new WpfPoint(-20, -20);
             }
             else
             {
@@ -607,7 +737,7 @@ namespace TheSSENS
                 panel.Children.Add(timeText);
 
                 _waypointMarkers[_currentWaypointIndex].Shape = panel;
-                _waypointMarkers[_currentWaypointIndex].Offset = new WpfPoint(-12, -12);
+                _waypointMarkers[_currentWaypointIndex].Offset = new WpfPoint(-20, -20);
             }
 
             _currentWaypointIndex++;
@@ -661,6 +791,8 @@ namespace TheSSENS
 
         private void OnSimulationLoopTick(object? sender, EventArgs e)
         {
+            // 35~0 종말 구간 진행
+            UpdateTerminalApproach();
             if (MissionTimeText != null && _missionStopwatch != null)
             {
                 MissionTimeText.Text = _missionStopwatch.Elapsed.ToString(@"mm\:ss\:ff");
@@ -695,7 +827,7 @@ namespace TheSSENS
                         ToolTip = isFinal ? "최종 표적" : $"Waypoint {i + 1}"
                     };
                     _waypointMarkers[i].Shape = original;
-                    _waypointMarkers[i].Offset = new WpfPoint(-12, -12);
+                    _waypointMarkers[i].Offset = new WpfPoint(-20, -20);
                 }
             }
 

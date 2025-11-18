@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\workspace\\GUI\\SSNE GUI v2\\SSNE GUI v2.csproj": {}
+    "C:\\workspace\\GUI2\\The_SSENs_FLIR_Seeker\\SSNE GUI v2.csproj": {}
   },
   "projects": {
-    "C:\\workspace\\GUI\\SSNE GUI v2\\SSNE GUI v2.csproj": {
+    "C:\\workspace\\GUI2\\The_SSENs_FLIR_Seeker\\SSNE GUI v2.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\workspace\\GUI\\SSNE GUI v2\\SSNE GUI v2.csproj",
+        "projectUniqueName": "C:\\workspace\\GUI2\\The_SSENs_FLIR_Seeker\\SSNE GUI v2.csproj",
         "projectName": "SSNE GUI v2",
-        "projectPath": "C:\\workspace\\GUI\\SSNE GUI v2\\SSNE GUI v2.csproj",
+        "projectPath": "C:\\workspace\\GUI2\\The_SSENs_FLIR_Seeker\\SSNE GUI v2.csproj",
         "packagesPath": "C:\\Users\\DSO21\\.nuget\\packages\\",
-        "outputPath": "C:\\workspace\\GUI\\SSNE GUI v2\\obj\\",
+        "outputPath": "C:\\workspace\\GUI2\\The_SSENs_FLIR_Seeker\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

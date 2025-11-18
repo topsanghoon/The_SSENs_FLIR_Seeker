@@ -141,6 +141,17 @@ namespace TheSSENS
 
         private void OnNewSampleLeft(object sender, NewSampleArgs args)
         {
+            // [FPS 계산 로직 시작]
+            _framesLeft++;
+            long now = System.Environment.TickCount64; // 현재 시간 (ms)
+            if (now - _lastTimeLeft >= 1000) // 1초가 지났으면
+            {
+                _fpsLeft = _framesLeft * 1000.0 / (now - _lastTimeLeft);
+                _framesLeft = 0;
+                _lastTimeLeft = now;
+            }
+            // [FPS 계산 로직 끝]
+
             _isLeftSignalActive = true; // 1. "지난 2초간 신호가 1번이라도 들어왔음" 플래그 ON
 
             if (!_isLeftOverlayActive) // 2. "그런데 오버레이가 'NoSig' 상태였나?"
@@ -413,6 +424,17 @@ namespace TheSSENS
 
         private void OnNewSampleRight(object? sender, NewSampleArgs args)
         {
+            // [FPS 계산 로직 시작]
+            _framesRight++;
+            long now = System.Environment.TickCount64;
+            if (now - _lastTimeRight >= 1000)
+            {
+                _fpsRight = _framesRight * 1000.0 / (now - _lastTimeRight);
+                _framesRight = 0;
+                _lastTimeRight = now;
+            }
+            // [FPS 계산 로직 끝]
+
             _isRightSignalActive = true; // 1. "신호 들어옴" 플래그 ON
 
             if (!_isRightOverlayActive) // 2. "오버레이가 'NoSig' 상태였나?"
