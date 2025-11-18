@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "restore": {
+    "C:\\Users\\DSO1\\Downloads\\SSNE GUI v2-20251107T093923Z-1-001\\SSNE GUI v2\\SSNE GUI v2.csproj": {}
+  },
+  "projects": {
+    "C:\\Users\\DSO1\\Downloads\\SSNE GUI v2-20251107T093923Z-1-001\\SSNE GUI v2\\SSNE GUI v2.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\DSO1\\Downloads\\SSNE GUI v2-20251107T093923Z-1-001\\SSNE GUI v2\\SSNE GUI v2.csproj",
+        "projectName": "SSNE GUI v2",
+        "projectPath": "C:\\Users\\DSO1\\Downloads\\SSNE GUI v2-20251107T093923Z-1-001\\SSNE GUI v2\\SSNE GUI v2.csproj",
+        "packagesPath": "C:\\Users\\DSO1\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\DSO1\\Downloads\\SSNE GUI v2-20251107T093923Z-1-001\\SSNE GUI v2\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\DSO1\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "dependencies": {
+            "GMap.NET.Core": {
+              "target": "Package",
+              "version": "[2.1.7, )"
+            },
+            "GMap.NET.WinPresentation": {
+              "target": "Package",
+              "version": "[2.1.7, )"
+            },
+            "OpenCvSharp4": {
+              "target": "Package",
+              "version": "[4.11.0.20250507, )"
+            },
+            "OpenCvSharp4.Extensions": {
+              "target": "Package",
+              "version": "[4.11.0.20250507, )"
+            },
+            "OpenCvSharp4.runtime.win": {
+              "target": "Package",
+              "version": "[4.11.0.20250507, )"
+            },
+            "SQLitePCLRaw.bundle_e_sqlite3": {
+              "target": "Package",
+              "version": "[3.0.2, )"
+            },
+            "SQLitePCLRaw.core": {
+              "target": "Package",
+              "version": "[3.0.2, )"
+            },
+            "System.Data.SQLite": {
+              "target": "Package",
+              "version": "[2.0.2, )"
+            },
+            "System.Data.SQLite.Core": {
+              "target": "Package",
+              "version": "[1.0.119, )"
+            },
+            "gstreamer-sharp-netcore": {
+              "target": "Package",
+              "version": "[0.0.8, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App": {
+              "privateAssets": "none"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.300/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

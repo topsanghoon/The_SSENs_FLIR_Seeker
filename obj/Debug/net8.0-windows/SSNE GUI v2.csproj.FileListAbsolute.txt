@@ -1,0 +1,24 @@
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.csproj.AssemblyReference.cache
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\App.g.cs
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2_MarkupCompile.cache
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\MainWindow.baml
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\MainWindow.g.cs
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.g.resources
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.AssemblyInfoInputs.cache
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.AssemblyInfo.cs
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.csproj.CoreCompileInputs.cache
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\SSNE GUI v2.exe
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\SSNE GUI v2.deps.json
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\SSNE GUI v2.runtimeconfig.json
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\SSNE GUI v2.dll
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\SSNE GUI v2.pdb
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\GioSharp.dll
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\GLibSharp.dll
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\bin\Debug\net8.0-windows\gstreamer-sharp-netcore.dll
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI.04088875.Up2Date
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.dll
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\refint\SSNE GUI v2.dll
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.pdb
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\SSNE GUI v2.genruntimeconfig.cache
+C:\Users\DSO1\Desktop\ssen project\SSNE GUI v2\obj\Debug\net8.0-windows\ref\SSNE GUI v2.dll

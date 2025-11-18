@@ -1,0 +1,15 @@
+﻿<Window x:Class="TheSSENS.GrapicOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mywf="clr-namespace:TheSSENS"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStyle="None"
+        ShowInTaskbar="False"
+        Topmost="True" 
+        IsHitTestVisible="False">
+    <Grid>
+        <Image x:Name="OverlayImage" Stretch="Fill" />
+
+    </Grid>
+</Window>
