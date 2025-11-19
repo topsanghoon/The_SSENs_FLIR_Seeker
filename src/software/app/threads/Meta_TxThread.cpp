@@ -1,4 +1,4 @@
-// Meta_TxThread.cpp (CSV-minimal: bus IN만 기록, UDP 송신은 CSV 미기록; send 성공 콘솔 출력 제거)
+// Meta_TxThread.cpp (TL-based CSV: bus IN만 기록, UDP 송신은 CSV 미기록)
 #include "threads_includes/Meta_TxThread.hpp"
 
 // 프로토콜 빌더/이벤트 페이로드 타입은 cpp에서만 include
@@ -15,14 +15,13 @@
 #include <sys/socket.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
-#include <array>  // for std::array
+#include <array>
+#include <sstream>
 
 // ✅ 공통 유틸
 #include "util/common_log.hpp"
-#include "util/time_util.hpp"
-#include "util/csv_sink.hpp"
-#include "util/telemetry.hpp"
-
+#include "util/time_util.hpp"   // now_us_steady(), now_ms_epoch()
+#include "util/telemetry.hpp"   // CSV_LOG_TL
 
 namespace flir {
 
@@ -64,7 +63,10 @@ Meta_TxThread::~Meta_TxThread() { stop(); join(); close_io_(); }
 
 void Meta_TxThread::start() {
     if (running_.exchange(true)) return;
-    if (!init_io_()) { running_.store(false); throw std::runtime_error("Meta_TxThread init_io failed"); }
+    if (!init_io_()) {
+        running_.store(false);
+        throw std::runtime_error("Meta_TxThread init_io failed");
+    }
 
     wake_ = std::make_unique<EfdWakeHandle>(efd_);
     bus_.subscribe(Topic::Tracking, &inbox_, wake_.get());
@@ -72,20 +74,34 @@ void Meta_TxThread::start() {
     bus_.subscribe(Topic::Control,  &inbox_, wake_.get());
 
     hb_period_ms_ = cfg_->meta_tx.hb_period_ms;
-    CSV_LOG_SIMPLE("Meta.Tx", "THREAD_START", 0, 0,0,0,0, "");
+
+    CSV_LOG_TL("Meta.Tx",
+               0,
+               0,0,0,0,
+               0,
+               "THREAD_START");
+
     th_ = std::thread(&Meta_TxThread::run_, this);
 }
 
 void Meta_TxThread::stop() {
     if (!running_.load()) return;
     running_.store(false);
-    if (efd_ >= 0) { EfdWakeHandle tmp(efd_); tmp.signal(); }
+    if (efd_ >= 0) {
+        EfdWakeHandle tmp(efd_);
+        tmp.signal();
+    }
 }
 void Meta_TxThread::join() {
     if (th_.joinable()) th_.join();
     bus_.unsubscribe(&inbox_);
     wake_.reset();
-    CSV_LOG_SIMPLE("Meta.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
+
+    CSV_LOG_TL("Meta.Tx",
+               0,
+               0,0,0,0,
+               0,
+               "THREAD_STOP");
 }
 
 bool Meta_TxThread::init_io_() {
@@ -155,10 +171,15 @@ void Meta_TxThread::set_meta_target_(const struct sockaddr* sa, socklen_t slen) 
 }
 
 void Meta_TxThread::run_() {
-    constexpr int MAXE = 8; epoll_event evs[MAXE];
+    constexpr int MAXE = 8;
+    epoll_event evs[MAXE];
     while (running_.load()) {
         int n = ::epoll_wait(epfd_, evs, MAXE, -1);
-        if (n < 0) { if (errno == EINTR) continue; LOGE(TAG, "epoll_wait: %s", strerror(errno)); break; }
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            LOGE(TAG, "epoll_wait: %s", strerror(errno));
+            break;
+        }
         if (n == 0) continue;
         for (int i = 0; i < n; ++i) {
             int fd = evs[i].data.fd;
@@ -177,7 +198,6 @@ void Meta_TxThread::send_aruco_full_(uint64_t ts, int id,
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
                          (sockaddr*)&sa_meta_, sl_meta_);
     if (n < 0) LOGE(TAG, "send_aruco(full) failed: %s", strerror(errno));
-    // 성공 시 콘솔 출력 없음
 }
 
 // (옵션) 하위호환: bbox-only 가 필요하면 이 함수도 남겨둠
@@ -187,54 +207,109 @@ void Meta_TxThread::send_aruco_bbox_(uint64_t ts, int id, const cv::Rect2f& box)
     ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
                          (sockaddr*)&sa_meta_, sl_meta_);
     if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno));
-    // 성공 시 콘솔 출력 없음
 }
 
 void Meta_TxThread::on_eventfd_ready_() {
     drain_eventfd(efd_);
+
     while (auto ev = inbox_.exchange(nullptr)) {
         switch (ev->type) {
             case EventType::Track: {
                 const auto& x = std::get<TrackEvent>(ev->payload);
-                last_trk_ = { (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.score, x.ts, x.frame_seq };
+                last_trk_ = { (float)x.box.x, (float)x.box.y,
+                              (float)x.box.width, (float)x.box.height,
+                              x.score, x.ts, x.frame_seq };
 
-                // ✅ 버스 입력(IN)만 CSV로 기록 (UDP 송신은 CSV 미기록)
-                CSV_LOG_SIMPLE("Meta.Tx", "IN_TRACK", x.frame_seq, x.box.x, x.box.y, x.box.width, x.box.height,
-                               "score=" + std::to_string(x.score));
+                const std::uint64_t t0_us = now_us_steady();
+                send_track_(x.ts, x.frame_seq,
+                            (float)x.box.x, (float)x.box.y,
+                            (float)x.box.width, (float)x.box.height,
+                            x.score);
+                const std::uint64_t t3_us = now_us_steady();
 
-                send_track_(x.ts, x.frame_seq, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.score);
+                std::ostringstream oss;
+                oss << "IN_TRACK"
+                    << ",score=" << x.score
+                    << ",x=" << x.box.x
+                    << ",y=" << x.box.y
+                    << ",w=" << x.box.width
+                    << ",h=" << x.box.height;
+
+                CSV_LOG_TL("Meta.Tx",
+                           static_cast<unsigned long>(x.frame_seq),
+                           t0_us, t3_us, t3_us, t3_us,
+                           (t3_us >= t0_us ? t3_us - t0_us : 0),
+                           oss.str());
                 break;
             }
             case EventType::Aruco: {
                 const auto& x = std::get<ArucoEvent>(ev->payload);
-                last_aru_ = { x.id, (float)x.box.x, (float)x.box.y, (float)x.box.width, (float)x.box.height, x.ts };
+                last_aru_ = { x.id,
+                              (float)x.box.x, (float)x.box.y,
+                              (float)x.box.width, (float)x.box.height,
+                              x.ts };
 
-                CSV_LOG_SIMPLE("Meta.Tx", "IN_ARUCO", 0, x.id, x.box.x, x.box.y, x.box.width,
-                               "h=" + std::to_string(x.box.height));
-
-                // ✅ 코너까지 포함해서 전송 (성공시 콘솔 출력 없음)
+                const std::uint64_t t0_us = now_us_steady();
                 send_aruco_full_(x.ts, x.id, x.box, x.corners);
+                const std::uint64_t t3_us = now_us_steady();
+
+                std::ostringstream oss;
+                oss << "IN_ARUCO"
+                    << ",id=" << x.id
+                    << ",x=" << x.box.x
+                    << ",y=" << x.box.y
+                    << ",w=" << x.box.width
+                    << ",h=" << x.box.height;
+
+                CSV_LOG_TL("Meta.Tx",
+                           static_cast<unsigned long>(x.id),
+                           t0_us, t3_us, t3_us, t3_us,
+                           (t3_us >= t0_us ? t3_us - t0_us : 0),
+                           oss.str());
                 break;
             }
             case EventType::MetaCtrl: {
                 const auto& x = std::get<MetaCtrlEvent>(ev->payload);
-                last_ctl_.last_cmd = x.cmd; last_ctl_.ts = x.ts;
+                last_ctl_.last_cmd = x.cmd;
+                last_ctl_.ts       = x.ts;
 
-                CSV_LOG_SIMPLE("Meta.Tx", "IN_META_CMD", 0, (double)x.cmd, 0,0,0, "");
-
+                const std::uint64_t t0_us = now_us_steady();
                 send_ctrl_(x.ts, x.cmd);
+                const std::uint64_t t3_us = now_us_steady();
+
+                std::ostringstream oss;
+                oss << "IN_META_CMD"
+                    << ",cmd=" << x.cmd;
+
+                CSV_LOG_TL("Meta.Tx",
+                           0,
+                           t0_us, t3_us, t3_us, t3_us,
+                           (t3_us >= t0_us ? t3_us - t0_us : 0),
+                           oss.str());
                 break;
             }
             case EventType::CtrlState: {
                 const auto& x = std::get<CtrlStateEvent>(ev->payload);
-                last_ctl_.state = x.state; last_ctl_.ts = x.ts;
+                last_ctl_.state = x.state;
+                last_ctl_.ts    = x.ts;
 
-                CSV_LOG_SIMPLE("Meta.Tx", "IN_STATE", 0, (double)x.state, 0,0,0, "");
-
+                const std::uint64_t t0_us = now_us_steady();
                 send_ctrl_(x.ts, x.state);
+                const std::uint64_t t3_us = now_us_steady();
+
+                std::ostringstream oss;
+                oss << "IN_STATE"
+                    << ",state=" << x.state;
+
+                CSV_LOG_TL("Meta.Tx",
+                           0,
+                           t0_us, t3_us, t3_us, t3_us,
+                           (t3_us >= t0_us ? t3_us - t0_us : 0),
+                           oss.str());
                 break;
             }
-            default: break;
+            default:
+                break;
         }
     }
     last_sent_ns_ = flir::now_ns_steady();
@@ -247,33 +322,35 @@ void Meta_TxThread::on_timerfd_ready_() {
 }
 
 // ===== 송신 (cpp에서만 MetaWire 사용) =====
-void Meta_TxThread::send_track_(uint64_t ts, uint32_t seq, float x, float y, float w, float h, float score) {
+void Meta_TxThread::send_track_(uint64_t ts, uint32_t seq,
+                                float x, float y, float w, float h, float score) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_track(ts, seq, {x,y,w,h}, score);
-    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
+                         (sockaddr*)&sa_meta_, sl_meta_);
     if (n < 0) LOGE(TAG, "send_track failed: %s", strerror(errno));
-    // 성공 시 콘솔 출력 없음
 }
-void Meta_TxThread::send_aruco_(uint64_t ts, int id, float x, float y, float w, float h) {
+void Meta_TxThread::send_aruco_(uint64_t ts, int id,
+                                float x, float y, float w, float h) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_aruco(ts, id, {x,y,w,h});
-    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
+                         (sockaddr*)&sa_meta_, sl_meta_);
     if (n < 0) LOGE(TAG, "send_aruco failed: %s", strerror(errno));
-    // 성공 시 콘솔 출력 없음
 }
 void Meta_TxThread::send_ctrl_(uint64_t ts, int state_or_cmd) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_ctrl(ts, state_or_cmd);
-    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
+                         (sockaddr*)&sa_meta_, sl_meta_);
     if (n < 0) LOGE(TAG, "send_ctrl failed: %s", strerror(errno));
-    // 성공 시 콘솔 출력 없음
 }
 void Meta_TxThread::send_hb_(uint64_t ts) {
     if (sock_ < 0 || sl_meta_ == 0) return;
     auto buf = build_hb(ts);
-    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0, (sockaddr*)&sa_meta_, sl_meta_);
+    ssize_t n = ::sendto(sock_, buf.bytes.data(), buf.bytes.size(), 0,
+                         (sockaddr*)&sa_meta_, sl_meta_);
     if (n < 0) LOGE(TAG, "send_hb failed: %s", strerror(errno));
-    // 성공 시 콘솔 출력 없음
 }
 
 } // namespace flir

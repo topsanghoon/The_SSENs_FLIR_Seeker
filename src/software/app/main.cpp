@@ -52,6 +52,9 @@ static void sig_handler(int s){ std::cout << "\n[SIG] " << s << " → quit\n"; g
 struct DummyWakeTx : WakeHandle { void signal() override {} };
 
 int main(int, char**) {
+
+    cv::setUseOptimized(true);
+    cv::setNumThreads(1);
     // ─────────────────────────────────────────────────────────────
     // 0) 프로세스 레벨 초기화
     // ─────────────────────────────────────────────────────────────
@@ -69,9 +72,7 @@ int main(int, char**) {
     // std::cout << "[INFO] NEON support: " << (neon ? "YES" : "NO") << std::endl;*
 
     std::cout <<"[INFO] Application starting..." << std::endl;
-    std::cout <<"[INFO] Application starting..." << std::endl;
-    std::cout <<"[INFO] Application starting..." << std::endl;
-    std::cout <<"[INFO] Application starting..." << std::endl;
+
     // 전역 설정
     auto app = std::make_shared<AppConfig>();
     {
@@ -123,8 +124,8 @@ int main(int, char**) {
     SpscMailbox<std::shared_ptr<EOFrameHandle>> mb_eo_aru(1);
 
     // 입력/자폭
-    SpscMailbox<UserCmd>         mb_click(64);
-    SpscMailbox<SelfDestructCmd> mb_sd(4);
+    SpscMailbox<UserCmd>         mb_click(8);
+    SpscMailbox<SelfDestructCmd> mb_sd(2);
 
     // ─────────────────────────────────────────────────────────────
     // 2) 스레드 구성: TX → Capture → Analysis 순으로 의존성 배치

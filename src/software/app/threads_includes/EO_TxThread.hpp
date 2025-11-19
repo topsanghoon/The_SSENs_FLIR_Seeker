@@ -42,7 +42,7 @@ public:
 private:
     bool initialize_gstreamer();
     void wait_for_frame();
-    void push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle);
+    bool push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle);
     void run();
 
 private:

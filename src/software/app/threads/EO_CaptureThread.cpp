@@ -2,12 +2,15 @@
 #include "components/includes/EO_Frame.hpp"
 #include "util/common_log.hpp"
 #include "guidance_mode.hpp"
+#include "util/telemetry.hpp"
+#include "util/time_util.hpp"
 
 #include <opencv2/opencv.hpp>
 #include <chrono>
 #include <vector>
 #include <cstring>
 #include <limits>
+#include <string>
 
 namespace flir {
 
@@ -74,13 +77,41 @@ EO_CaptureThread::EO_CaptureThread(std::string name,
                                    SpscMailbox<std::shared_ptr<EOFrameHandle>>& out_aru,
                                    std::unique_ptr<WakeHandle> wake,
                                    AppConfigPtr cfg)
-: name_(std::move(name)), out_tx_(out_tx), out_aru_(out_aru), wake_(std::move(wake)), cfg_(std::move(cfg)) {}
+: name_(std::move(name))
+, out_tx_(out_tx)
+, out_aru_(out_aru)
+, wake_(std::move(wake))
+, cfg_(std::move(cfg)) {}
 
 EO_CaptureThread::~EO_CaptureThread() { stop(); join(); }
 
-void EO_CaptureThread::start() { if (running_.exchange(true)) return; th_ = std::thread(&EO_CaptureThread::run_, this); }
-void EO_CaptureThread::stop()  { running_.store(false); }
-void EO_CaptureThread::join()  { if (th_.joinable()) th_.join(); }
+void EO_CaptureThread::start() {
+    if (running_.exchange(true)) return;
+
+    // 스레드 시작 타임라인
+    CSV_LOG_TL("EO.Cap",
+               0,    // seq
+               0,0,0,0,
+               0,
+               "THREAD_START");
+
+    th_ = std::thread(&EO_CaptureThread::run_, this);
+}
+
+void EO_CaptureThread::stop()  {
+    running_.store(false);
+}
+
+void EO_CaptureThread::join()  {
+    if (th_.joinable()) th_.join();
+
+    // 스레드 종료 타임라인
+    CSV_LOG_TL("EO.Cap",
+               0,
+               0,0,0,0,
+               0,
+               "THREAD_STOP");
+}
 
 void EO_CaptureThread::push_frame_(std::shared_ptr<EOFrameHandle> h) {
     if (!h) return;
@@ -117,6 +148,7 @@ void EO_CaptureThread::run_() {
         cap.set(cv::CAP_PROP_FPS,          FPS);
     }
 
+    const bool using_camera = cap.isOpened();
     const auto period = std::chrono::milliseconds(1000 / FPS);
 
     // 1초 주기 처리 로그
@@ -124,12 +156,34 @@ void EO_CaptureThread::run_() {
     uint64_t last_seq = 0;
 
     while (running_.load(std::memory_order_relaxed)) {
+        // ── 타임라인 초기화 ──
+        std::uint64_t t0_us = now_us_steady();
+        std::uint64_t t1_us = 0;
+        std::uint64_t t2_us = 0;
+        std::uint64_t t3_us = 0;
+        std::string   note;
+
         auto t0 = std::chrono::steady_clock::now();
 
         cv::Mat frame_bgr;
-        if (cap.isOpened()) {
+        if (using_camera) {
             if (!cap.read(frame_bgr) || frame_bgr.empty()) {
-                // 드물게 카메라가 빈 프레임을 줄 수 있음 → 다음 루프
+                // 드물게 카메라가 빈 프레임을 줄 수 있음 → 이번 루프는 유효 프레임 없음
+                note = "CAP_EMPTY";
+                t1_us = now_us_steady();
+                t2_us = t1_us;
+                t3_us = t1_us;
+
+                // 프레임 seq_는 증가시키지 않는다 (실제 전달된 프레임 없음)
+                CSV_LOG_TL("EO.Cap",
+                           0,            // 시퀀스 없음
+                           t0_us, t1_us, t2_us, t3_us,
+                           0,
+                           note);
+
+                // sleep 타이밍은 유지
+                auto dt = std::chrono::steady_clock::now() - t0;
+                if (dt < period) std::this_thread::sleep_for(period - dt);
                 continue;
             }
             if (frame_bgr.cols != W || frame_bgr.rows != H) {
@@ -151,15 +205,36 @@ void EO_CaptureThread::run_() {
             }
         }
 
+        // 프레임 준비 완료 시점
+        t1_us = now_us_steady();
+
         auto h = make_bgr8_handle_safe_(frame_bgr);
         if (!h) {
-            // 핸들 생성 실패 → 다음 루프
+            // 핸들 생성 실패
+            note = "HANDLE_FAIL";
+            t2_us = t1_us;
+            t3_us = now_us_steady();
+
+            CSV_LOG_TL("EO.Cap",
+                       0,          // 실제 seq 없음
+                       t0_us, t1_us, t2_us, t3_us,
+                       0,
+                       note);
+
+            auto dt = std::chrono::steady_clock::now() - t0;
+            if (dt < period) std::this_thread::sleep_for(period - dt);
             continue;
         }
+
         h->seq = ++seq_;
         push_frame_(std::move(h));
 
-        // — 1초 주기 처리 로그 —
+        note = using_camera ? "OK_CAM" : "OK_COLORBAR";
+
+        // push_frame_ 이후 시점
+        t2_us = now_us_steady();
+
+        // — 1초 주기 처리 로그 — (콘솔용)
         auto now = std::chrono::steady_clock::now();
         if (now - log_t0 >= 1s) {
             auto cur = seq_;
@@ -172,6 +247,15 @@ void EO_CaptureThread::run_() {
 
         auto dt = std::chrono::steady_clock::now() - t0;
         if (dt < period) std::this_thread::sleep_for(period - dt);
+
+        t3_us = now_us_steady();
+
+        // 이 루프에서 실제로 보낸 프레임에 대해 1줄 기록
+        CSV_LOG_TL("EO.Cap",
+                   seq_,      // 프레임 시퀀스
+                   t0_us, t1_us, t2_us, t3_us,
+                   0,         // t_total_us 자동 계산 (마지막 tN - t0)
+                   note);
     }
     LOGI(TAG, "run() exit");
 }

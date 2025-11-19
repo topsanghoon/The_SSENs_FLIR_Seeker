@@ -1,4 +1,4 @@
-// IR_TxThread.cpp (merged: safety fixes + GRAY16->GRAY8 + JPEG pipeline)
+// IR_TxThread.cpp (TL-based logging: GRAY16->GRAY8 + JPEG pipeline)
 #include "threads_includes/IR_TxThread.hpp"
 #include "ipc/wake_condvar.hpp"
 #include <chrono>
@@ -17,8 +17,8 @@
 
 // 공용 로그/CSV
 #include "util/common_log.hpp"
-#include "util/csv_sink.hpp"
-#include "util/time_util.hpp"
+#include "util/time_util.hpp"   // now_us_steady()
+#include "util/telemetry.hpp"   // CSV_LOG_TL
 
 namespace flir {
 
@@ -28,7 +28,8 @@ namespace { constexpr const char* TAG = "IR_Tx"; }
 static inline void normalize16_to8(const IRFrame16& f, cv::Mat& out8,
                                    double minVal = 7000.0, double maxVal = 10000.0)
 {
-    const int w = f.width, h = f.height;
+    const int    w        = f.width;
+    const int    h        = f.height;
     const size_t src_step = (f.step ? f.step : w * sizeof(uint16_t));
     cv::Mat src16(h, w, CV_16UC1, const_cast<uint16_t*>(f.data), src_step);
 
@@ -39,11 +40,20 @@ static inline void normalize16_to8(const IRFrame16& f, cv::Mat& out8,
     src16.convertTo(out8, CV_8U, scale, delta);
 }
 
-IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb, const GstConfig& gst_config)
-    : name_(std::move(name)), mb_(mb), gst_config_(gst_config) {}
+IR_TxThread::IR_TxThread(std::string name,
+                         SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb,
+                         const GstConfig& gst_config)
+    : name_(std::move(name))
+    , mb_(mb)
+    , gst_config_(gst_config)
+{}
 
-IR_TxThread::IR_TxThread(std::string name, SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb)
-    : name_(std::move(name)), mb_(mb), gst_config_(GstConfig{}) {}
+IR_TxThread::IR_TxThread(std::string name,
+                         SpscMailbox<std::shared_ptr<IRFrameHandle>>& mb)
+    : name_(std::move(name))
+    , mb_(mb)
+    , gst_config_(GstConfig{})
+{}
 
 IR_TxThread::~IR_TxThread() {
     stop();
@@ -130,7 +140,13 @@ void IR_TxThread::start() {
     running_.store(true);
     th_ = std::thread(&IR_TxThread::run, this);
     LOGI(TAG, "thread started");
-    CSV_LOG_SIMPLE("IR.Tx", "THREAD_START", 0, 0,0,0,0, "");
+
+    // TL: THREAD_START
+    CSV_LOG_TL("IR.Tx",
+               0,
+               0,0,0,0,
+               0,
+               "THREAD_START");
 }
 
 void IR_TxThread::stop() {
@@ -143,7 +159,13 @@ void IR_TxThread::join() {
     if (th_.joinable()) {
         th_.join();
         LOGI(TAG, "thread joined");
-        CSV_LOG_SIMPLE("IR.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
+
+        // TL: THREAD_STOP
+        CSV_LOG_TL("IR.Tx",
+                   0,
+                   0,0,0,0,
+                   0,
+                   "THREAD_STOP");
     }
 }
 
@@ -159,9 +181,9 @@ void IR_TxThread::wait_for_frame() {
 // 안전한 프레임 푸시(세그폴트 방지) : 16U→8U 정규화 후 GRAY8 전송
 void IR_TxThread::push_frame_to_gst(const std::shared_ptr<IRFrameHandle>& handle) {
     // 0) 핸들/포인터 유효성
-    if (!handle) { LOGE(TAG, "Null frame handle"); return; }
-    if (!handle->p) { LOGE(TAG, "Null IRFrame16 pointer"); return; }
-    if (!handle->p->data) { LOGE(TAG, "Null frame data"); return; }
+    if (!handle)          { LOGE(TAG, "Null frame handle");      return; }
+    if (!handle->p)       { LOGE(TAG, "Null IRFrame16 pointer"); return; }
+    if (!handle->p->data) { LOGE(TAG, "Null frame data");        return; }
 
     // 1) Mat 소유 수명 보장: IRMatHandle이면 keep를 강참조로 잡고 포인터 일치 확인
     std::shared_ptr<cv::Mat> mat_keeper;
@@ -239,17 +261,26 @@ void IR_TxThread::run() {
 
         if (auto handle_opt = mb_.exchange(nullptr)) {
             const auto& handle = *handle_opt;
+            const unsigned long seq = handle ? static_cast<unsigned long>(handle->seq) : 0UL;
 
-            double loop_ms = 0.0;
-            CSV_LOG_SIMPLE("IR.Tx", "LOOP_BEGIN", handle ? handle->seq : 0, 0,0,0,0, "");
+            std::string note = "OK";
+            const std::uint64_t t0_us = now_us_steady();
+
             try {
-                ScopedTimerMs timer(loop_ms);
                 push_frame_to_gst(handle);
             } catch (const std::exception& e) {
                 ++sec_fail;
-                CSV_LOG_SIMPLE("IR.Tx", "PUSH_FAIL", handle ? handle->seq : 0, 0,0,0,0, e.what());
+                note = std::string("PUSH_FAIL:") + e.what();
             }
-            CSV_LOG_SIMPLE("IR.Tx", "LOOP_END", handle ? handle->seq : 0, loop_ms, 0,0,0, "");
+
+            const std::uint64_t t3_us = now_us_steady();
+
+            // TL: 프레임 하나당 1줄
+            CSV_LOG_TL("IR.Tx",
+                       seq,
+                       t0_us, t3_us, t3_us, t3_us,
+                       (t3_us >= t0_us ? t3_us - t0_us : 0),
+                       note);
 
             ++total_frames;
             ++sec_frames;
@@ -258,7 +289,7 @@ void IR_TxThread::run() {
 
         frame_seq_seen_ = mb_.latest_seq();
 
-        // 1초 주기 통계
+        // 1초 주기 통계 (콘솔만)
         auto now = std::chrono::steady_clock::now();
         if (now - t0 >= std::chrono::seconds(1)) {
             LOGI(TAG, "tx stats: fps=%llu, bytes=%llu, push_fail=%llu, total=%llu",

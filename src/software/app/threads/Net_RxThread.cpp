@@ -1,4 +1,4 @@
-// Net_RxThread.cpp  (CSV unified: start/stop + per-dgram loop + CLICK_RX/SD_RX)
+// Net_RxThread.cpp  (TL-based CSV: start/stop + per-command CLICK_RX/SD_RX)
 #include "threads_includes/Net_RxThread.hpp"
 
 #include <arpa/inet.h>
@@ -15,9 +15,8 @@
 
 // ✅ 공통 유틸
 #include "util/common_log.hpp"   // LOGI/LOGW/LOGE...
-#include "util/time_util.hpp"    // ScopedTimerMs
-#include "util/csv_sink.hpp"     // CSV_LOG_SIMPLE
-#include "util/telemetry.hpp"
+#include "util/time_util.hpp"    // now_us_steady()
+#include "util/telemetry.hpp"    // CSV_LOG_TL
 
 namespace flir {
 
@@ -32,7 +31,7 @@ Net_RxThread::Net_RxThread(std::string name,
     , cfg_(std::move(cfg))
     , out_click_(click_out)
     , out_sd_(sd_out)
-    , bus_(bus)                               // ★
+    , bus_(bus)
 {
     rxbuf_.resize(std::max<size_t>(cfg_->net_rx.buffer_size, 1024));
 }
@@ -49,7 +48,13 @@ void Net_RxThread::start() {
         running_.store(false);
         throw std::runtime_error("Net_RxThread socket init failed");
     }
-    CSV_LOG_SIMPLE("Net.Rx", "THREAD_START", 0, 0,0,0,0, "");
+
+    CSV_LOG_TL("Net.Rx",
+               0,
+               0,0,0,0,
+               0,
+               "THREAD_START");
+
     th_ = std::thread(&Net_RxThread::run_, this);
 }
 
@@ -58,14 +63,22 @@ void Net_RxThread::stop() {
     running_.store(false);
     // poll 깨우기용 dummy datagram (loopback)
     if (sock_ >= 0) {
-        sockaddr_in self{}; self.sin_family = AF_INET; self.sin_port = htons(bind_port_); self.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        sockaddr_in self{};
+        self.sin_family      = AF_INET;
+        self.sin_port        = htons(bind_port_);
+        self.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         ::sendto(sock_, "", 0, 0, (sockaddr*)&self, sizeof(self));
     }
 }
 
 void Net_RxThread::join() {
     if (th_.joinable()) th_.join();
-    CSV_LOG_SIMPLE("Net.Rx", "THREAD_STOP", 0, 0,0,0,0, "");
+
+    CSV_LOG_TL("Net.Rx",
+               0,
+               0,0,0,0,
+               0,
+               "THREAD_STOP");
 }
 
 bool Net_RxThread::init_socket_() {
@@ -73,13 +86,22 @@ bool Net_RxThread::init_socket_() {
 
     bind_port_ = cfg_->net_rx.port;
     sock_ = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-    if (sock_ < 0) { LOGE(TAG, "socket: %s", strerror(errno)); return false; }
+    if (sock_ < 0) {
+        LOGE(TAG, "socket: %s", strerror(errno));
+        return false;
+    }
     own_sock_ = true;
 
-    sockaddr_in a{}; a.sin_family = AF_INET; a.sin_port = htons(bind_port_); a.sin_addr.s_addr = htonl(INADDR_ANY);
+    sockaddr_in a{};
+    a.sin_family      = AF_INET;
+    a.sin_port        = htons(bind_port_);
+    a.sin_addr.s_addr = htonl(INADDR_ANY);
     if (::bind(sock_, (sockaddr*)&a, sizeof(a)) != 0) {
         LOGE(TAG, "bind :%u failed: %s", bind_port_, strerror(errno));
-        ::close(sock_); sock_ = -1; own_sock_ = false; return false;
+        ::close(sock_);
+        sock_     = -1;
+        own_sock_ = false;
+        return false;
     }
 
     LOGI(TAG, "listening UDP :%u (timeout=%dms, buf=%zu, click_box=%.1f)",
@@ -88,12 +110,15 @@ bool Net_RxThread::init_socket_() {
 }
 
 void Net_RxThread::close_socket_() {
-    if (own_sock_ && sock_ >= 0) { ::close(sock_); sock_ = -1; own_sock_ = false; }
+    if (own_sock_ && sock_ >= 0) {
+        ::close(sock_);
+        sock_     = -1;
+        own_sock_ = false;
+    }
 }
 
 void Net_RxThread::run_() {
     const int timeout_ms = cfg_->net_rx.timeout_ms;
-    uint32_t pkt_seq = 0;
 
     while (running_.load()) {
         pollfd pfd{ .fd = sock_, .events = POLLIN, .revents = 0 };
@@ -108,18 +133,17 @@ void Net_RxThread::run_() {
         if (r == 0) continue;
 
         if (pfd.revents & POLLIN) {
-            sockaddr_in src{}; socklen_t sl = sizeof(src);
-            const ssize_t n = ::recvfrom(sock_, rxbuf_.data(), rxbuf_.size(), 0, (sockaddr*)&src, &sl);
+            sockaddr_in src{};
+            socklen_t sl = sizeof(src);
+            const ssize_t n = ::recvfrom(sock_,
+                                         rxbuf_.data(),
+                                         rxbuf_.size(),
+                                         0,
+                                         (sockaddr*)&src,
+                                         &sl);
             if (n <= 0) continue;
 
-            const uint32_t seq = ++pkt_seq;
-            double loop_ms = 0.0;
-            CSV_LOG_SIMPLE("Net.Rx", "LOOP_BEGIN", seq, (double)n, 0,0,0, "");
-            {
-                ScopedTimerMs t(loop_ms);
-                handle_datagram_(rxbuf_.data(), static_cast<size_t>(n), src);
-            }
-            CSV_LOG_SIMPLE("Net.Rx", "LOOP_END",   seq, loop_ms, 0,0,0, "");
+            handle_datagram_(rxbuf_.data(), static_cast<size_t>(n), src);
         }
     }
 
@@ -139,13 +163,25 @@ static inline std::string to_lower(std::string s){
 void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const sockaddr_in&) {
     if (len == 0) return;
 
+    const std::uint64_t t0_us = now_us_steady();
+
     // ── 0) 바이너리 자폭: [0x01][level]
     SelfDestructCmd sd{};
     if (parse_cmd_sd_bin_(data, len, sd)) {
         out_sd_.push(sd);
-        CSV_LOG_SIMPLE("Net.Rx","SD_RX", sd.seq, (double)sd.level, 0,0,0, "");
-        // ★ 이벤트버스로도 발행 → ControlThread 깨움
+        // 이벤트버스로도 발행 → ControlThread / ControlThread::handle_self_destruct
         bus_.push(Event{ EventType::SelfDestruct, SelfDestructEvent{ sd.level, sd.seq } }, Topic::User);
+
+        const std::uint64_t t3_us = now_us_steady();
+        std::ostringstream oss;
+        oss << "SD_RX"
+            << ",level=" << sd.level;
+
+        CSV_LOG_TL("Net.Rx",
+                   static_cast<unsigned long>(sd.seq),
+                   t0_us, t3_us, t3_us, t3_us,
+                   (t3_us >= t0_us ? t3_us - t0_us : 0),
+                   oss.str());
         return;
     }
 
@@ -166,9 +202,22 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
             cmd.seq  = ++click_seq_;
 
             out_click_.push(cmd);
-            CSV_LOG_SIMPLE("Net.Rx", "CLICK_RX", cmd.seq, cmd.box.x, cmd.box.y, cmd.box.width, cmd.box.height, "");
-            // ★ 이벤트버스로도 발행 → IR_TrackThread 깨움(onClickArrived 내부 notify)
+            // 이벤트버스로도 발행 → IR_TrackThread onClickArrived / ControlThread 등
             bus_.push(Event{ EventType::UserClick, UserClickEvent{ cmd.box, cmd.seq } }, Topic::User);
+
+            const std::uint64_t t3_us = now_us_steady();
+            std::ostringstream oss;
+            oss << "CLICK_RX"
+                << ",x=" << cmd.box.x
+                << ",y=" << cmd.box.y
+                << ",w=" << cmd.box.width
+                << ",h=" << cmd.box.height;
+
+            CSV_LOG_TL("Net.Rx",
+                       static_cast<unsigned long>(cmd.seq),
+                       t0_us, t3_us, t3_us, t3_us,
+                       (t3_us >= t0_us ? t3_us - t0_us : 0),
+                       oss.str());
             return;
         }
         // 값 비정상 → 텍스트 경로로 폴백
@@ -182,9 +231,19 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
     // 2-1) 자폭 텍스트: "SD" / "SD <level>" / "SELF" / "SELF_DESTRUCT [level]"
     if (parse_cmd_sd_text_(msg, sd)) {
         out_sd_.push(sd);
-        CSV_LOG_SIMPLE("Net.Rx", "SD_RX", sd.seq, (double)sd.level, 0,0,0, "");
-        // ★ 이벤트버스 발행
         bus_.push(Event{ EventType::SelfDestruct, SelfDestructEvent{ sd.level, sd.seq } }, Topic::User);
+
+        const std::uint64_t t3_us = now_us_steady();
+        std::ostringstream oss;
+        oss << "SD_RX"
+            << ",level=" << sd.level
+            << ",src=text";
+
+        CSV_LOG_TL("Net.Rx",
+                   static_cast<unsigned long>(sd.seq),
+                   t0_us, t3_us, t3_us, t3_us,
+                   (t3_us >= t0_us ? t3_us - t0_us : 0),
+                   oss.str());
         return;
     }
 
@@ -192,14 +251,33 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
     UserCmd click{};
     if (parse_cmd_click_(msg, click)) {
         out_click_.push(click);
-        CSV_LOG_SIMPLE("Net.Rx", "CLICK_RX", click.seq, click.box.x, click.box.y, click.box.width, click.box.height, "");
-        // ★ 이벤트버스 발행
         bus_.push(Event{ EventType::UserClick, UserClickEvent{ click.box, click.seq } }, Topic::User);
+
+        const std::uint64_t t3_us = now_us_steady();
+        std::ostringstream oss;
+        oss << "CLICK_RX"
+            << ",x=" << click.box.x
+            << ",y=" << click.box.y
+            << ",w=" << click.box.width
+            << ",h=" << click.box.height
+            << ",src=text";
+
+        CSV_LOG_TL("Net.Rx",
+                   static_cast<unsigned long>(click.seq),
+                   t0_us, t3_us, t3_us, t3_us,
+                   (t3_us >= t0_us ? t3_us - t0_us : 0),
+                   oss.str());
         return;
     }
 
-    // 3) 그 외는 조용히 드롭
+    // 3) 그 외는 조용히 드롭 (경고 + 선택적 TL)
     LOGW(TAG, "unrecognized msg ...");
+    const std::uint64_t t3_us = now_us_steady();
+    CSV_LOG_TL("Net.Rx",
+               0,
+               t0_us, t3_us, t3_us, t3_us,
+               (t3_us >= t0_us ? t3_us - t0_us : 0),
+               "UNRECOG");
 }
 
 
@@ -208,7 +286,8 @@ static bool extract_two_floats(const std::string& s, float& x, float& y) {
     // 구분자들을 공백으로 통일
     std::string t; t.reserve(s.size());
     for (char c : s) {
-        if (c==',' || c==';' || c==':' || c=='[' || c==']' || c=='(' || c==')' || std::isspace((unsigned char)c))
+        if (c==',' || c==';' || c==':' || c=='[' || c==']' || c=='(' || c==')'
+            || std::isspace((unsigned char)c))
             t.push_back(' ');
         else
             t.push_back(c);
@@ -229,7 +308,11 @@ static bool extract_two_floats(const std::string& s, float& x, float& y) {
             iss >> tok; // 버림
         }
     }
-    if (gotA && gotB) { x = static_cast<float>(a); y = static_cast<float>(b); return true; }
+    if (gotA && gotB) {
+        x = static_cast<float>(a);
+        y = static_cast<float>(b);
+        return true;
+    }
     return false;
 }
 
@@ -245,7 +328,10 @@ bool Net_RxThread::parse_cmd_click_(const std::string& msg, UserCmd& out) {
         s.erase(0, 5);
         trim_in_place(s);
         // 앞에 콜론/콤마가 바로 오면 제거
-        while (!s.empty() && (s[0]==':' || s[0]==',')) { s.erase(0,1); trim_in_place(s); }
+        while (!s.empty() && (s[0]==':' || s[0]==',')) {
+            s.erase(0,1);
+            trim_in_place(s);
+        }
     }
 
     // 3) 남은 문자열에서 숫자 2개만 뽑기 (형식 자유)
@@ -259,11 +345,11 @@ bool Net_RxThread::parse_cmd_click_(const std::string& msg, UserCmd& out) {
     return true;
 }
 
-
 bool Net_RxThread::parse_cmd_sd_text_(const std::string& msg, SelfDestructCmd& out) {
     // 허용 토큰: SD / sd / SELF / self / SELF_DESTRUCT / self_destruct
     std::istringstream iss(msg);
-    std::string head; if (!(iss >> head)) return false;
+    std::string head;
+    if (!(iss >> head)) return false;
 
     auto eq = [&](const char* s){
         if (head.size() != std::strlen(s)) return false;

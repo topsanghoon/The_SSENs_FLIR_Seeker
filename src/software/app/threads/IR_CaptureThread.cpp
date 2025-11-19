@@ -15,6 +15,8 @@
 #include <algorithm>
 
 #include "util/common_log.hpp"
+#include "util/telemetry.hpp"   // CSV_LOG_TL
+#include "util/time_util.hpp"   // now_us_steady()
 
 namespace flir {
 
@@ -147,6 +149,13 @@ void IR_CaptureThread::start(){
     watchdog_running_.store(true);
     watchdog_thread_ = std::thread(&IR_CaptureThread::watchdog_run, this);
     th_ = std::thread(&IR_CaptureThread::run, this);
+
+    // THREAD_START 타임라인
+    CSV_LOG_TL("IR.Cap",
+               0,    // seq
+               0,0,0,0,
+               0,
+               "THREAD_START");
 }
 
 void IR_CaptureThread::stop(){
@@ -158,6 +167,13 @@ void IR_CaptureThread::stop(){
 void IR_CaptureThread::join(){
     if (th_.joinable()) th_.join();
     if (watchdog_thread_.joinable()) watchdog_thread_.join();
+
+    // THREAD_STOP 타임라인
+    CSV_LOG_TL("IR.Cap",
+               0,
+               0,0,0,0,
+               0,
+               "THREAD_STOP");
 }
 
 // -------------------- 보조: 소프트 리셋/승격 --------------------
@@ -177,6 +193,7 @@ void IR_CaptureThread::note_soft_reset_and_maybe_escalate_(){ /* unused */ }
 
 // -------------------- Watchdog (빠른 감지 + 계층 복구) --------------------
 
+// (watchdog_run 그대로 – CSV 타임라인은 IR.Cap 메인 루프만 기록)
 void IR_CaptureThread::watchdog_run(){
     uint64_t last_fc = 0;
     auto last_tick = std::chrono::steady_clock::now();
@@ -298,27 +315,54 @@ void IR_CaptureThread::run(){
          vospi::FRAME_HEIGHT, vospi::PAYLOAD_SIZE);
 
     while (running_.load()){
+        // ── 타임라인 측정 시작 ──
+        std::uint64_t t0_us = now_us_steady();
+        std::uint64_t t1_us = 0;
+        std::uint64_t t2_us = 0;
+        std::uint64_t t3_us = 0;
+        std::string   note;
+        std::uint64_t seq = 0;
+
         if (reset_requested_.load()){
             perform_safe_reset();
+            note = "RESET";
+            t1_us = t2_us = t3_us = now_us_steady();
+
+            CSV_LOG_TL("IR.Cap",
+                       seq,
+                       t0_us, t1_us, t2_us, t3_us,
+                       0,
+                       note);
             continue;
         }
 
         try{
-            if (capture_vospi_frame()){
+            bool capture_ok = false;
+            capture_ok = capture_vospi_frame();
+            t1_us = now_us_steady();
+
+            if (capture_ok){
                 auto h = create_frame_handle();
                 if (h){
+                    seq = h->seq;
                     push_frame_routed_(h);
                     frame_count_.fetch_add(1);
+                    note = "OK";
                 } else {
                     error_count_.fetch_add(1);
+                    note = "HANDLE_FAIL";
                 }
             } else {
                 error_count_.fetch_add(1);
+                note = "CAPTURE_FAIL";
             }
         } catch(const std::exception& e){
             LOGE(TAG, "Capture exception: %s", e.what());
             error_count_.fetch_add(1);
+            note = std::string("EXCEPTION:") + e.what();
         }
+
+        t2_us = now_us_steady();
 
         // 1초 통계
         auto now = std::chrono::steady_clock::now();
@@ -345,6 +389,15 @@ void IR_CaptureThread::run(){
 
         // 캡처 루프에 짧은 양보만 (버퍼링처럼 끊기는 현상 완화)
         std::this_thread::sleep_for(std::chrono::microseconds(500));
+
+        t3_us = now_us_steady();
+
+        // 이번 루프 한 번에 대해 딱 1줄 타임라인 기록
+        CSV_LOG_TL("IR.Cap",
+                   seq,         // 성공한 프레임이면 seq, 아니면 0
+                   t0_us, t1_us, t2_us, t3_us,
+                   0,           // t_total_us는 마지막 tN - t0 자동계산
+                   note.empty() ? "NOOP" : note);
     }
 
     LOGI(TAG, "IR capture thread stopped.");
@@ -593,6 +646,7 @@ void IR_CaptureThread::push_frame_routed_(const std::shared_ptr<IRFrameHandle>& 
 
     if (track_sink_) { track_sink_(h); return; }
     if (output_trk_) {
+        
         output_trk_->push(h);
         if (track_wake_) track_wake_->signal();
     }

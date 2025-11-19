@@ -1,13 +1,13 @@
-// EO_TxThread.cpp (CSV unified, no per-IPC CSV logs)
+// EO_TxThread.cpp (TL 기반, 공통 CSV 포맷)
 #include "threads_includes/EO_TxThread.hpp"
 
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
-#include "util/telemetry.hpp"
-#include "util/common_log.hpp"   // LOGI/LOGD/LOGE
-#include "util/time_util.hpp"    // ScopedTimerMs
-#include "util/csv_sink.hpp"     // CSV_LOG_SIMPLE
+
+#include "util/telemetry.hpp"   // CSV_LOG_TL
+#include "util/common_log.hpp"  // LOGI/LOGD/LOGE
+#include "util/time_util.hpp"   // now_us_steady()
 
 namespace flir {
 
@@ -92,7 +92,13 @@ void EO_TxThread::start() {
     running_.store(true);
     th_ = std::thread(&EO_TxThread::run, this);
     LOGI(TAG, "thread started");
-    CSV_LOG_SIMPLE("EO.Tx", "THREAD_START", 0, 0,0,0,0, "");
+
+    // THREAD_START 이벤트
+    CSV_LOG_TL("EO.Tx",
+               0,       // seq
+               0,0,0,0,
+               0,
+               "THREAD_START");
 }
 
 void EO_TxThread::stop() {
@@ -105,7 +111,13 @@ void EO_TxThread::join() {
     if (th_.joinable()) {
         th_.join();
         LOGI(TAG, "thread joined");
-        CSV_LOG_SIMPLE("EO.Tx", "THREAD_STOP", 0, 0,0,0,0, "");
+
+        // THREAD_STOP 이벤트
+        CSV_LOG_TL("EO.Tx",
+                   0,
+                   0,0,0,0,
+                   0,
+                   "THREAD_STOP");
     }
 }
 
@@ -118,8 +130,9 @@ void EO_TxThread::wait_for_frame() {
     cv_.wait(lock, [&] { return !running_.load() || mb_.has_new(frame_seq_seen_); });
 }
 
-void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle) {
-    if (!appsrc_ || !handle || !handle->p || !handle->p->data) return;
+// push_frame_to_gst: 한 프레임을 GStreamer로 밀어넣고 성공/실패 반환
+bool EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle) {
+    if (!appsrc_ || !handle || !handle->p || !handle->p->data) return false;
 
     const guint buffer_size = static_cast<guint>(handle->p->step * handle->p->height);
     auto* handle_copy = new std::shared_ptr<EOFrameHandle>(handle);
@@ -143,7 +156,9 @@ void EO_TxThread::push_frame_to_gst(const std::shared_ptr<EOFrameHandle>& handle
     const GstFlowReturn ret = gst_app_src_push_buffer((GstAppSrc*)appsrc_, buffer);
     if (ret != GST_FLOW_OK) {
         LOGE(TAG, "gst_app_src_push_buffer failed: %d", (int)ret);
+        return false;
     }
+    return true;
 }
 
 void EO_TxThread::run() {
@@ -158,30 +173,49 @@ void EO_TxThread::run() {
 
         if (auto handle_opt = mb_.exchange(nullptr)) {
             const auto& handle = *handle_opt;
-            double loop_ms = 0.0;
-            CSV_LOG_SIMPLE("EO.Tx", "LOOP_BEGIN", handle->seq, 0,0,0,0, "");
-            {
-                ScopedTimerMs t(loop_ms);
-                push_frame_to_gst(handle);
+
+            // ── 타임라인 측정 ──
+            std::uint64_t t0_us = now_us_steady();
+            std::uint64_t t1_us = 0;
+            std::uint64_t t2_us = 0;
+            std::uint64_t t3_us = 0;
+            std::string   note;
+
+            const bool ok = push_frame_to_gst(handle);
+            t1_us = now_us_steady();
+            t2_us = t1_us; // 현재는 push 외에 추가 단계 없음
+
+            if (ok) {
+                ++total_frames;
+                ++sec_frames;
+                sec_bytes += static_cast<uint64_t>(handle->p->step) * handle->p->height;
+                note = "PUSH_OK";
+            } else {
+                note = "PUSH_FAIL";
             }
-            CSV_LOG_SIMPLE("EO.Tx", "LOOP_END", handle->seq, loop_ms, 0,0,0, "");
 
-            // 집계
-            ++total_frames;
-            ++sec_frames;
-            sec_bytes += static_cast<uint64_t>(handle->p->step) * handle->p->height;
-        }
-        frame_seq_seen_ = mb_.latest_seq();
+            frame_seq_seen_ = mb_.latest_seq();
 
-        // 1초 주기 로그
-        auto now = std::chrono::steady_clock::now();
-        if (now - t0 >= std::chrono::seconds(1)) {
-            LOGI(TAG, "tx stats: fps=%llu, bytes=%llu, total=%llu",
-                 (unsigned long long)sec_frames,
-                 (unsigned long long)sec_bytes,
-                 (unsigned long long)total_frames);
-            sec_frames = sec_bytes = 0;
-            t0 = now;
+            // 1초 주기 로그
+            auto now = std::chrono::steady_clock::now();
+            if (now - t0 >= std::chrono::seconds(1)) {
+                LOGI(TAG, "tx stats: fps=%llu, bytes=%llu, total=%llu",
+                     (unsigned long long)sec_frames,
+                     (unsigned long long)sec_bytes,
+                     (unsigned long long)total_frames);
+                sec_frames = 0;
+                sec_bytes  = 0;
+                t0 = now;
+            }
+
+            t3_us = now_us_steady();
+
+            // 프레임 하나에 대해 딱 1줄 기록
+            CSV_LOG_TL("EO.Tx",
+                       handle->seq,
+                       t0_us, t1_us, t2_us, t3_us,
+                       0,       // t_total_us 자동 계산 (마지막 tN - t0)
+                       note);
         }
     }
     LOGI(TAG, "run() exit, total_frames=%llu", (unsigned long long)total_frames);

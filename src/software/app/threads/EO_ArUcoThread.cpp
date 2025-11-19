@@ -1,9 +1,8 @@
-// EO_ArUcoThread.cpp (CSV-unified, no per-module CsvLogger)
+// EO_ArUcoThread.cpp (CSV-unified, TL 기반)
 #include "threads_includes/EO_ArUcoThread.hpp"
 #include "util/telemetry.hpp"
-#include "util/time_util.hpp"                      // now_ms_epoch(), ScopedTimerMs
+#include "util/time_util.hpp"                      // now_ms_epoch(), now_us_steady()
 #include "util/common_log.hpp"                     // LOGD/LOGI/...
-#include "util/csv_sink.hpp"                       // ✅ 단일 CSV 싱크
 #include "phase_gate.hpp"
 
 #include <condition_variable>
@@ -14,6 +13,7 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <string>
 
 namespace flir {
 
@@ -29,14 +29,23 @@ constexpr bool kVerbosePerFrameLog = false;
 EO_ArUcoThread::EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb,
                                IArucoPreprocessor&       preproc,
                                IArucoDetector&           detector,
-                               IEventBus&                bus
-                               /* CsvLoggerAru& logger 제거 */)
-: eo_mb_(eo_mb), preproc_(preproc), detector_(detector), bus_(bus) {}
+                               IEventBus&                bus)
+: eo_mb_(eo_mb)
+, preproc_(preproc)
+, detector_(detector)
+, bus_(bus) {}
 
 void EO_ArUcoThread::start(){
     running_.store(true);
     LOGI(kTAG, "start()");
-    CSV_LOG_SIMPLE("EO.Aruco", "THREAD_START", 0, 0,0,0,0, "");
+
+    // 스레드 시작 이벤트
+    CSV_LOG_TL("EO.Aruco",
+               0,      // seq
+               0,0,0,0,
+               0,      // total_us (의미 없음)
+               "THREAD_START");
+
     th_ = std::thread(&EO_ArUcoThread::run, this);
 }
 
@@ -50,10 +59,15 @@ void EO_ArUcoThread::join(){
     if (th_.joinable()){
         th_.join();
         LOGI(kTAG, "join() done");
-        CSV_LOG_SIMPLE("EO.Aruco", "THREAD_STOP", 0, 0,0,0,0, "");
+
+        // 스레드 종료 이벤트
+        CSV_LOG_TL("EO.Aruco",
+                   0,
+                   0,0,0,0,
+                   0,
+                   "THREAD_STOP");
     }
 }
-
 
 void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){
     eo_mb_.push(std::move(h));
@@ -61,15 +75,9 @@ void EO_ArUcoThread::onFrameArrived(std::shared_ptr<EOFrameHandle> h){
 }
 
 bool EO_ArUcoThread::is_big_enough(int bw, int bh) const {
-    
-    // 절대 기준
-    // bool big_abs = (bw >= cfg_.guidance.min_bbox_w) &&
-    //                (bh >= cfg_.guidance.min_bbox_h);
-
     bool big_abs = (bw >= cfg_.guidance.min_bbox_w) &&
                    (bh >= cfg_.guidance.min_bbox_h);
 
-    // (선택) 비율 기준
     bool big_frac = false;
     if (cfg_.guidance.min_bbox_frac > 0.f && cfg_.eo_w > 0 && cfg_.eo_h > 0) {
         float fw = static_cast<float>(bw) / static_cast<float>(cfg_.eo_w);
@@ -83,7 +91,7 @@ void EO_ArUcoThread::run() {
     LOGI(kTAG, "run() loop enter");
 
     // 주기 요약 로그용 통계
-    uint64_t stat_t0_ms = now_ms_epoch();
+    uint64_t stat_t0_ms  = now_ms_epoch();
     uint64_t last_log_ms = stat_t0_ms;
     uint32_t stat_frames = 0;
     uint32_t stat_found  = 0;
@@ -93,96 +101,146 @@ void EO_ArUcoThread::run() {
     double   stat_min_ms = 1e12;
 
     while (running_.load()) {
-        if (!flir::eo_enabled()) { std::unique_lock<std::mutex> lk(m_); cv_.wait_for(lk, std::chrono::milliseconds(5)); continue; }
-        
+        if (!flir::eo_enabled()) {
+            std::unique_lock<std::mutex> lk(m_);
+            cv_.wait_for(lk, std::chrono::milliseconds(5));
+            continue;
+        }
+
         wait_until_ready();
         if (!running_.load()) break;
         if (!eo_mb_.has_new(frame_seq_seen_)) continue;
 
         if (auto h_opt = eo_mb_.exchange(nullptr)) {
-            // 옵셔널과 shared_ptr을 벗겨 실제 프레임 참조를 얻는다
             auto& sh = *h_opt;                // std::shared_ptr<EOFrameHandle>&
-            const EOFrameHandle& fr = *sh;    // EOFrameHandle& → 인터페이스에 맞는 실제 객체
-
+            const EOFrameHandle& fr = *sh;    // EOFrameHandle&
             frame_seq_seen_ = fr.seq;
 
-            double t_ms_total = 0.0, t_ms_pre = 0.0, t_ms_det = 0.0;
-            CSV_LOG_SIMPLE("EO.Aruco", "LOOP_BEGIN", fr.seq, 0,0,0,0, "");
-            {
-                ScopedTimerMs t_all(t_ms_total);
+            // ─────────────────────────────────────
+            // 타임라인 (us) + note (1줄로 기록)
+            // ─────────────────────────────────────
+            uint64_t t0_us = now_us_steady();
+            uint64_t t1_us = 0;
+            uint64_t t2_us = 0;
+            uint64_t t3_us = 0;
+            std::string note;
 
-                try{
+            bool found = false;
 
-                
+            try {
                 // --- 전처리 ---
                 cv::Mat pf;
-                {
-                    ScopedTimerMs t_pre(t_ms_pre);
-                    preproc_.run(fr, pf);     // const EOFrameHandle& 로 전달
-                }
+                preproc_.run(fr, pf);
+                t1_us = now_us_steady();
 
                 if (pf.empty()) {
-                    CSV_LOG_SIMPLE("EO.Aruco", "PRE_EMPTY", fr.seq, 0,0,0,0, "");
+                    note = "PRE_EMPTY";
+                    // detect 안 했으므로 t2=t1, t3=t1 로 맞춤
+                    t2_us = t1_us;
+                    t3_us = t1_us;
+
+                    double total_ms = (t3_us >= t0_us)
+                                      ? (double)(t3_us - t0_us) / 1000.0
+                                      : 0.0;
+
+                    stat_frames++;
+                    stat_lost++;
+                    stat_sum_ms += total_ms;
+                    stat_max_ms = std::max(stat_max_ms, total_ms);
+                    stat_min_ms = std::min(stat_min_ms, total_ms);
+
+                    CSV_LOG_TL("EO.Aruco",
+                               fr.seq,
+                               t0_us, t1_us, t2_us, t3_us,
+                               0,          // total_us 자동계산
+                               note);
                     continue;
                 }
 
                 // --- 검출 ---
                 std::vector<IArucoDetector::Detection> detections;
-                {
-                    ScopedTimerMs t_det(t_ms_det);
-                    detections = detector_.detect(pf);
-                }
+                detections = detector_.detect(pf);
+                t2_us = now_us_steady();
 
-                const bool found = !detections.empty();
-
+                found = !detections.empty();
+                int temp_id;
                 if (found) {
                     for (auto& d : detections) {
-                        if(toFindAruco == d.id) {
+                        if (toFindAruco == d.id) {
                             emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq);
-                            if(toFindAruco != 3 && is_big_enough(static_cast<int>(d.bbox.width), static_cast<int>(d.bbox.height))) {
+                            temp_id = d.id;
+                            if (toFindAruco != 3 &&
+                                is_big_enough(static_cast<int>(d.bbox.width),
+                                              static_cast<int>(d.bbox.height))) {
                                 toFindAruco++;
                             }
                         }
                     }
-                    // 마커 발견 이벤트: v1=pre_ms, v2=det_ms, note=개수
-                    CSV_LOG_SIMPLE("EO.Aruco", "MARKER_FOUND", fr.seq,
-                                   t_ms_pre, t_ms_det, 0, 0,
-                                   "n=" + std::to_string(detections.size()));
+
+                    note = "FOUND:id=" + std::to_string(temp_id);
                 } else {
-                    CSV_LOG_SIMPLE("EO.Aruco", "MARKER_LOST", fr.seq,
-                                   t_ms_pre, t_ms_det, 0, 0, "");
+                    note = "LOST";
                 }
 
                 if (kVerbosePerFrameLog) {
+                    double pre_ms   = (t1_us >= t0_us)
+                                      ? (double)(t1_us - t0_us) / 1000.0 : 0.0;
+                    double det_ms   = (t2_us >= t1_us)
+                                      ? (double)(t2_us - t1_us) / 1000.0 : 0.0;
+                    double total_ms = (t2_us >= t0_us)
+                                      ? (double)(t2_us - t0_us) / 1000.0 : 0.0;
+
                     LOGDs(kTAG) << "seq=" << fr.seq
                                 << " ts="  << fr.ts
-                                << " pre_ms=" << t_ms_pre
-                                << " det_ms=" << t_ms_det
-                                << " total_ms=" << t_ms_total
+                                << " pre_ms=" << pre_ms
+                                << " det_ms=" << det_ms
+                                << " total_ms=" << total_ms
                                 << " n=" << detections.size();
                 }
 
-                // 통계 갱신
+                // 통계 갱신 (t3_us 를 이따 확정하고 나서)
+                t3_us = now_us_steady();
+                double total_ms = (t3_us >= t0_us)
+                                  ? (double)(t3_us - t0_us) / 1000.0
+                                  : 0.0;
+
                 stat_frames++;
-                stat_sum_ms += t_ms_total;
-                stat_max_ms  = std::max(stat_max_ms, t_ms_total);
-                stat_min_ms  = std::min(stat_min_ms, t_ms_total);
+                stat_sum_ms += total_ms;
+                stat_max_ms = std::max(stat_max_ms, total_ms);
+                stat_min_ms = std::min(stat_min_ms, total_ms);
                 if (found) stat_found++; else stat_lost++;
-                } catch(const cv::Exception& e){
-                    LOGE(kTAG, "detect exception: %s", e.what());
-                    CSV_LOG_SIMPLE("EO.Aruco", "DETECT_EX", fr.seq, 0,0,0,0, e.what());
-                    // 통계는 lost로 카운트하거나 skip
-                    stat_lost++;
-                    continue;
-                }
+
+                CSV_LOG_TL("EO.Aruco",
+                           fr.seq,
+                           t0_us, t1_us, t2_us, t3_us,
+                           0,          // total_us 자동 계산
+                           note);
+            } catch (const cv::Exception& e) {
+                LOGE(kTAG, "detect exception: %s", e.what());
+                t3_us = now_us_steady();
+
+                double total_ms = (t3_us >= t0_us)
+                                  ? (double)(t3_us - t0_us) / 1000.0
+                                  : 0.0;
+
+                stat_frames++;
+                stat_lost++;
+                stat_sum_ms += total_ms;
+                stat_max_ms = std::max(stat_max_ms, total_ms);
+                stat_min_ms = std::min(stat_min_ms, total_ms);
+
+                note = std::string("DETECT_EX:") + e.what();
+
+                CSV_LOG_TL("EO.Aruco",
+                           fr.seq,
+                           t0_us, t1_us, t2_us, t3_us,
+                           0,
+                           note);
+                continue;
             }
-            // 세부 시간 측정치를 별도 이벤트로 남겨 두면 후처리 필터링이 쉬움
-            CSV_LOG_SIMPLE("EO.Aruco", "PRE_MS",   fr.seq, t_ms_pre,   0, 0, 0, "");
-            CSV_LOG_SIMPLE("EO.Aruco", "DET_MS",   fr.seq, t_ms_det,   0, 0, 0, "");
-            CSV_LOG_SIMPLE("EO.Aruco", "LOOP_END", fr.seq, t_ms_total, 0, 0, 0, "");
         }
 
-        // 1초 주기 요약 로그
+        // 1초 주기 요약 로그 (콘솔용)
         const uint64_t now_ms = now_ms_epoch();
         if (now_ms - last_log_ms >= 1000) {
             const double elapsed_s = (now_ms - last_log_ms) / 1000.0;
@@ -216,8 +274,6 @@ void EO_ArUcoThread::wait_until_ready() {
 }
 
 void EO_ArUcoThread::on_frame(const std::shared_ptr<EOFrameHandle>& h) {
-    // 기존 단순 처리 함수는 run()에서 직접 인라인/확장 처리로 대체.
-    // 남겨두고 싶다면 여기에 공용 처리 로직을 옮겨도 됨.
     frame_seq_seen_ = h->seq;
 }
 
@@ -233,11 +289,9 @@ void EO_ArUcoThread::emit_aruco(int id,
                     << "," << box.width << "x" << box.height << ")";
     }
 
-    // 이벤트 버스로 전달
     ArucoEvent a{ id, corners, box, ts_ns};
     Event ev{ EventType::Aruco, a };
     bus_.push(ev, Topic::Aruco);
-
 }
 
 } // namespace flir

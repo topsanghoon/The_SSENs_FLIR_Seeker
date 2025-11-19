@@ -1,12 +1,17 @@
-// IR_TrackThread.cpp  (CSV unified / CsvLoggerIR 제거)
+// IR_TrackThread.cpp  (TL 기반 CSV / CsvLoggerIR 제거)
 #include "threads_includes/IR_TrackThread.hpp"
+
 #include <iostream>
 #include <condition_variable>
 #include <mutex>
+#include <string>
+#include <sstream>
 
-#include "util/csv_sink.hpp"   // ✅ 단일 CSV 싱크
-#include "util/telemetry.hpp"
+#include "util/telemetry.hpp"   // CSV_LOG_TL
+#include "util/time_util.hpp"   // now_us_steady()
+#include "util/common_log.hpp"
 #include "phase_gate.hpp"
+
 /*
 종말 유도가 아니면 tracking 스레드에 데이터가 들어오지 않음으로 깨어날 일 없음.
 중기 유도가 끝나면 중기 ArUco 스레드가 종료되면서 전역 변수를 바꿀것이고, 바꾸면 이후 캡쳐 과정에서 IR 프레임을
@@ -35,18 +40,33 @@ IR_TrackThread::IR_TrackThread(SpscMailbox<std::shared_ptr<IRFrameHandle>>& ir_m
 // start, stop, join — 스레드 제어
 void IR_TrackThread::start() {
     if (running_.exchange(true)) return;
-    CSV_LOG_SIMPLE("IR.Track", "THREAD_START", 0, 0,0,0,0, "");
+
+    // THREAD_START 타임라인
+    CSV_LOG_TL("IR.Track",
+               0,      // seq
+               0,0,0,0,
+               0,
+               "THREAD_START");
+
     th_ = std::thread(&IR_TrackThread::run, this);
 }
+
 void IR_TrackThread::stop() {
     if (!running_.load()) return;
     running_.store(false);
     cv_.notify_all(); // 대기 중이면 깨워서 종료 경로로
 }
+
 void IR_TrackThread::join() {
     if (th_.joinable()) {
         th_.join();
-        CSV_LOG_SIMPLE("IR.Track", "THREAD_STOP", 0, 0,0,0,0, "");
+
+        // THREAD_STOP 타임라인
+        CSV_LOG_TL("IR.Track",
+                   0,
+                   0,0,0,0,
+                   0,
+                   "THREAD_STOP");
     }
 }
 
@@ -55,10 +75,10 @@ void IR_TrackThread::join() {
 프레임이 와야 한 스텝이 진행된다.
 */
 void IR_TrackThread::onFrameArrived(std::shared_ptr<IRFrameHandle> h) {
-    
     ir_mb_.push(std::move(h));
     cv_.notify_one();
 }
+
 void IR_TrackThread::onClickArrived(const UserCmd& cmd) {
     click_mb_.push(cmd);
     cv_.notify_one();
@@ -67,27 +87,41 @@ void IR_TrackThread::onClickArrived(const UserCmd& cmd) {
 // 메인 루프
 void IR_TrackThread::run() {
     while (running_.load()) {
-        if (!flir::ir_enabled()) { std::unique_lock<std::mutex> lk(m_); cv_.wait_for(lk, std::chrono::milliseconds(5)); continue; }
+        if (!flir::ir_enabled()) {
+            std::unique_lock<std::mutex> lk(m_);
+            cv_.wait_for(lk, std::chrono::milliseconds(5));
+            continue;
+        }
+
         wait_until_ready();
         if (!running_.load()) break;
 
-        if (click_mb_.has_new(click_mb_seq_seen_)) {
+        // 1) 클릭 먼저 모두 처리
+        while (click_mb_.has_new(click_mb_seq_seen_)) {
             if (auto cmd = click_mb_.exchange(nullptr)) {
                 handle_click(*cmd);
+            } else {
+                break;
             }
         }
-        if (ir_mb_.latest_seq() == ir_mb_seq_seen_) continue;
-        
+
+        // 2) IR 프레임 처리
+        const auto cur_mb_seq = ir_mb_.latest_seq();
+        if (cur_mb_seq == ir_mb_seq_seen_) {
+            // 새 프레임 없음
+            continue;
+        }
+
         if (auto hopt = ir_mb_.exchange(nullptr)) {
-            std::shared_ptr<IRFrameHandle> h = *hopt; // tx와 공유하므로 shared_ptr
+            std::shared_ptr<IRFrameHandle> h = *hopt;
             if (h) {
-                double loop_ms = 0.0;
-                CSV_LOG_SIMPLE("IR.Track", "LOOP_BEGIN", last_frame_seq_, 0,0,0,0, "");
-                {
-                    ScopedTimerMs t(loop_ms);
-                    on_frame(*h);   // 참조로 넘겨 파생형 가상함수 유지
-                }
-                CSV_LOG_SIMPLE("IR.Track", "LOOP_END",   last_frame_seq_, loop_ms, 0,0,0, "");
+                // 메일박스 seq 갱신
+                ir_mb_seq_seen_ = cur_mb_seq;
+
+                // 프레임 고유 seq 저장 (이걸 이벤트에 실어보냄)
+                last_frame_seq_ = h->seq;
+
+                on_frame(*h);   // 타임라인 로깅은 on_frame 내부
                 h->release();   // 파생형 release() 허용(기본 no-op)
             }
         }
@@ -108,28 +142,61 @@ void IR_TrackThread::wait_until_ready() {
 void IR_TrackThread::handle_click(const UserCmd& cmd) {
     target_box_         = cmd.box;
     new_target_         = true;
-    click_mb_seq_seen_     = cmd.seq;
+    click_mb_seq_seen_  = cmd.seq;
     fail_streak_        = 0;
     reselect_notified_  = false;
 
-    // 콘솔 로그 + CSV(좌표/크기 4개를 v1..v4에 기록)
+    // 콘솔 로그
     LOGI(TAG, "click: (%.1f, %.1f, %.1f, %.1f) seq=%u",
          cmd.box.x, cmd.box.y, cmd.box.width, cmd.box.height, cmd.seq);
-    CSV_LOG_SIMPLE("IR.Track", "CLICK", cmd.seq,
-                   cmd.box.x, cmd.box.y, cmd.box.width, cmd.box.height, "");
+
+    // TL 포맷으로 클릭 이벤트도 남겨둔다 (즉시 이벤트)
+    const std::uint64_t t_us = now_us_steady();
+    std::ostringstream oss;
+    oss << "CLICK"
+        << ",x=" << cmd.box.x
+        << ",y=" << cmd.box.y
+        << ",w=" << cmd.box.width
+        << ",h=" << cmd.box.height;
+
+    CSV_LOG_TL("IR.Track",
+               static_cast<unsigned long>(cmd.seq),
+               t_us, t_us, t_us, t_us,
+               0,
+               oss.str());
 }
 
 void IR_TrackThread::on_frame(IRFrameHandle& h) {
+    // ── 타임라인 측정 시작 ──
+    std::uint64_t t0_us = now_us_steady();
+    std::uint64_t t1_us = 0;
+    std::uint64_t t2_us = 0;
+    std::uint64_t t3_us = 0;
+
+    double pre_us = 0.0;
+    double upd_us = 0.0;
+
+    std::string note;
 
     // 1) 프리프로세싱
     cv::Mat pf32;
-    double pre_ms = 0.0;
-    { flir::ScopedTimerMs t(pre_ms); preproc_.run(*h.p, pf32); }
-    CSV_LOG_SIMPLE("IR.Track", "PRE_MS", h.seq, pre_ms, 0,0,0, "");
+    {
+        std::uint64_t t_pre0 = now_us_steady();
+        preproc_.run(*h.p, pf32);
+        std::uint64_t t_pre1 = now_us_steady();
+        pre_us = static_cast<double>(t_pre1 - t_pre0);
+        t1_us  = t_pre1;
+    }
 
     // 2) 새 타깃 초기화 시도
     if (new_target_) {
-        if (try_init(pf32, target_box_)) {
+        std::uint64_t t_upd0 = now_us_steady();
+        bool init_ok = try_init(pf32, target_box_);
+        std::uint64_t t_upd1 = now_us_steady();
+        upd_us = static_cast<double>(t_upd1 - t_upd0);
+        t2_us  = t_upd1;
+
+        if (init_ok) {
             tracking_valid_    = true;
             new_target_        = false;
             fail_streak_       = 0;
@@ -137,81 +204,147 @@ void IR_TrackThread::on_frame(IRFrameHandle& h) {
 
             emit_init(target_box_, h.ts);
 
-            LOGI(TAG, "init OK (seq=%u, pre=%.2f ms)", h.seq, pre_ms);
-            CSV_LOG_SIMPLE("IR.Track", "INIT_OK", h.seq, pre_ms, 0,0,0, "");
+            LOGI(TAG, "init OK (seq=%u, pre=%.2f us)", h.seq, pre_us);
+            std::ostringstream oss;
+            oss << "INIT_OK"
+                << ",pre_us=" << pre_us
+                << ",upd_us=" << upd_us
+                << ",x=" << target_box_.x
+                << ",y=" << target_box_.y
+                << ",w=" << target_box_.width
+                << ",h=" << target_box_.height;
+            note = oss.str();
         } else {
             tracking_valid_ = false;
             new_target_     = false;
             fail_streak_++;
 
-            LOGW(TAG, "init FAIL #%d (pre=%.2f ms)", fail_streak_, pre_ms);
-            CSV_LOG_SIMPLE("IR.Track", "INIT_FAIL", h.seq, pre_ms, fail_streak_, 0,0, "");
+            LOGW(TAG, "init FAIL #%d (pre=%.2f us)", fail_streak_, pre_us);
+            emit_lost(target_box_, h.ts);
 
-            if (fail_streak_ == 1) emit_lost(target_box_, h.ts);
+            bool need_reselect = false;
             if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
                 reselect_notified_ = true;
                 emit_need_reselect();
-                CSV_LOG_SIMPLE("IR.Track", "NEED_RESELECT", h.seq, fail_streak_, 0,0,0, "");
+                need_reselect = true;
             }
+
+            std::ostringstream oss;
+            oss << "INIT_FAIL"
+                << ",pre_us=" << pre_us
+                << ",upd_us=" << upd_us
+                << ",streak=" << fail_streak_
+                << ",need_reselect=" << (need_reselect ? 1 : 0);
+            note = oss.str();
         }
+
+        t3_us = now_us_steady();
+        CSV_LOG_TL("IR.Track",
+                   static_cast<unsigned long>(h.seq),
+                   t0_us, t1_us, t2_us, t3_us,
+                   0,
+                   note);
         return;
     }
 
     // 3) 이미 타깃 상실 상태: 누적만
     if (!tracking_valid_) {
         fail_streak_++;
-        LOGW(TAG, "lost (streak=%d, pre=%.2f ms)", fail_streak_, pre_ms);
-        CSV_LOG_SIMPLE("IR.Track", "LOST", h.seq, pre_ms, fail_streak_, 0,0, "");
+
+        LOGW(TAG, "lost (streak=%d, pre=%.2f us)", fail_streak_, pre_us);
 
         if (fail_streak_ == 1) {
             emit_lost(target_box_, h.ts); // 첫 상실만 Lost 이벤트
         }
+
+        bool need_reselect = false;
         if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
             reselect_notified_ = true;
             emit_need_reselect();
-            CSV_LOG_SIMPLE("IR.Track", "NEED_RESELECT", h.seq, fail_streak_, 0,0,0, "");
+            need_reselect = true;
         }
+
+        t2_us = t1_us; // 추가 업데이트는 없음
+        t3_us = now_us_steady();
+
+        std::ostringstream oss;
+        oss << "LOST"
+            << ",pre_us=" << pre_us
+            << ",streak=" << fail_streak_
+            << ",need_reselect=" << (need_reselect ? 1 : 0);
+        note = oss.str();
+
+        CSV_LOG_TL("IR.Track",
+                   static_cast<unsigned long>(h.seq),
+                   t0_us, t1_us, t2_us, t3_us,
+                   0,
+                   note);
         return;
     }
 
     // 4) 유효 상태: 업데이트
     cv::Rect2f out; float score = 0.f;
-    double upd_ms = 0.0;
     bool ok = false;
-    { flir::ScopedTimerMs t(upd_ms); ok = try_update(pf32, out, score); }
-    CSV_LOG_SIMPLE("IR.Track", "UPD_MS", h.seq, upd_ms, 0,0,0, "");
+    {
+        std::uint64_t t_upd0 = now_us_steady();
+        ok = try_update(pf32, out, score);
+        std::uint64_t t_upd1 = now_us_steady();
+        upd_us = static_cast<double>(t_upd1 - t_upd0);
+        t2_us  = t_upd1;
+    }
 
     if (ok) {
         target_box_        = out;
-        fail_streak_       = 0; 
+        fail_streak_       = 0;
         reselect_notified_ = false;
         emit_track(out, score, h.ts);
 
-        LOGD(TAG, "track OK (seq=%u, pre=%.2f ms, upd=%.2f ms, score=%.3f, box=%.1f,%.1f,%.1f,%.1f)",
-             h.seq, pre_ms, upd_ms, score, out.x, out.y, out.width, out.height);
-        // v1=score, v2=upd_ms, v3=pre_ms (후분석 가독성)
-        CSV_LOG_SIMPLE("IR.Track", "TRACK_OK", h.seq, score, upd_ms, pre_ms, 0,
-                       "x=" + std::to_string(out.x) +
-                       ",y=" + std::to_string(out.y) +
-                       ",w=" + std::to_string(out.width) +
-                       ",h=" + std::to_string(out.height));
+        LOGD(TAG, "track OK (seq=%u, pre=%.2f us, upd=%.2f us, score=%.3f, box=%.1f,%.1f,%.1f,%.1f)",
+             h.seq, pre_us, upd_us, score, out.x, out.y, out.width, out.height);
+
+        std::ostringstream oss;
+        oss << "TRACK_OK"
+            << ",pre_us=" << pre_us
+            << ",upd_us=" << upd_us
+            << ",score="  << score
+            << ",x=" << out.x
+            << ",y=" << out.y
+            << ",w=" << out.width
+            << ",h=" << out.height;
+        note = oss.str();
     } else {
         tracking_valid_ = false;
         fail_streak_++;
 
-        LOGW(TAG, "track LOST (seq=%u, streak=%d, pre=%.2f ms, upd=%.2f ms)",
-             h.seq, fail_streak_, pre_ms, upd_ms);
-        // v1=pre_ms, v2=upd_ms, v3=streak
-        CSV_LOG_SIMPLE("IR.Track", "TRACK_LOST", h.seq, pre_ms, upd_ms, fail_streak_, 0, "");
+        LOGW(TAG, "track LOST (seq=%u, streak=%d, pre=%.2f us, upd=%.2f us)",
+             h.seq, fail_streak_, pre_us, upd_us);
 
         emit_lost(target_box_, h.ts);
 
+        bool need_reselect = false;
         if (fail_streak_ >= cfg_.user_req_threshold && !reselect_notified_) {
             reselect_notified_ = true;
             emit_need_reselect();
-            CSV_LOG_SIMPLE("IR.Track", "NEED_RESELECT", h.seq, fail_streak_, 0,0,0, "");
+            need_reselect = true;
         }
+
+        std::ostringstream oss;
+        oss << "TRACK_LOST"
+            << ",pre_us=" << pre_us
+            << ",upd_us=" << upd_us
+            << ",streak=" << fail_streak_
+            << ",need_reselect=" << (need_reselect ? 1 : 0);
+        note = oss.str();
     }
+
+    t3_us = now_us_steady();
+
+    // 이 프레임에 대해 딱 1줄 타임라인 기록
+    CSV_LOG_TL("IR.Track",
+               static_cast<unsigned long>(h.seq),
+               t0_us, t1_us, t2_us, t3_us,
+               0,
+               note);
 }
 
 bool IR_TrackThread::try_init(const cv::Mat& pf, const cv::Rect2f& box) {
