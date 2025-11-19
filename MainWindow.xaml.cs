@@ -694,7 +694,7 @@ namespace TheSSENS
         private void SD_Click(object sender, RoutedEventArgs e)
         {
             AppendLog($"[{System.DateTime.Now:HH:mm:ss}] [INFO] 필터 전환");
-
+            temp++;
             int newIndex = temp % 4;
             if (_isLeftSignalActive) _leftImageOverlay?.UpdateImage(newIndex);
             if (_isRightSignalActive) _rightImageOverlay?.UpdateImage(newIndex);
@@ -706,19 +706,28 @@ namespace TheSSENS
             lock (_logBuf) { _logBuf.AppendLine(text); }
 
             long now = NowMs();
-            if (now - _lastFlushMs < 100) return; // 100ms마다 flush
+            if (now - _lastFlushMs < 100) return; // 100ms 쓰로틀링 (이것도 아주 중요함)
             _lastFlushMs = now;
 
-            // BeginInvoke를 사용해 UI 스레드를 기다리지 않고 즉시 반환
             _ = Dispatcher.BeginInvoke(new Action(() =>
             {
                 string dump;
                 lock (_logBuf) { dump = _logBuf.ToString(); _logBuf.Clear(); }
+
+                // 1. 텍스트 추가
                 LogBox.Text += dump;
+
+                // 2. [핵심] 길이 제한 (메모리 폭주 방지)
+                const int MaxLogLen = 3000; // 약 3000자 정도만 유지
+                if (LogBox.Text.Length > MaxLogLen)
+                {
+                    // 뒤에서부터 MaxLogLen 만큼만 남기고 자름
+                    LogBox.Text = LogBox.Text.Substring(LogBox.Text.Length - MaxLogLen);
+                }
+
                 LogScrollViewer.ScrollToEnd();
             }), DispatcherPriority.Background);
         }
-
         private void ThrustBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { }
 
         // ====== [추가] 시나리오 버튼 클릭 이벤트 ======
