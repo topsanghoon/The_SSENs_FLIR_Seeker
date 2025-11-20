@@ -25,12 +25,12 @@ bool IR_Tracker_MOSSE::init(const cv::Mat& pf, const cv::Rect2f& box) {
         std::cerr << "[MOSSE] init: empty frame\n";
         return false;
     }
-    if (pf.type() != CV_32F && pf.type() != CV_32FC1) {
-        std::cerr << "[MOSSE] init: invalid input type (must be CV_32F)\n";
+    if (pf.type() != CV_8U && pf.type() != CV_8UC1) {
+        std::cerr << "[MOSSE] init: invalid input type (must be CV_8U 1-channel), type="
+                  << pf.type() << "\n";
         return false;
     }
 
-    // float -> float clamp -> 최소 크기 -> double 변환
     cv::Rect2f roi_f = clamp_roi(box, pf.size());
     if (roi_f.width < MIN_W || roi_f.height < MIN_H) {
         roi_f.width  = std::max<float>(roi_f.width,  MIN_W);
@@ -45,7 +45,9 @@ bool IR_Tracker_MOSSE::init(const cv::Mat& pf, const cv::Rect2f& box) {
         bool ok = tracker_->init(pf, roi_d);
         std::cout << "[MOSSE] init " << (ok ? "OK " : "FAIL ")
                   << "ROI=(" << (int)roi_d.x << "," << (int)roi_d.y << ","
-                  << (int)roi_d.width << "," << (int)roi_d.height << ")\n";
+                  << (int)roi_d.width << "," << (int)roi_d.height << "), "
+                  << "img=" << pf.cols << "x" << pf.rows
+                  << " ch=" << pf.channels() << " type=" << pf.type() << "\n";
         return ok;
     } catch (const cv::Exception& e) {
         std::cerr << "[MOSSE] exception in init(): " << e.what() << "\n";
@@ -56,8 +58,18 @@ bool IR_Tracker_MOSSE::init(const cv::Mat& pf, const cv::Rect2f& box) {
 
 bool IR_Tracker_MOSSE::update(const cv::Mat& pf, cv::Rect2f& out_box, float& score) {
     if (!tracker_) return false;
+    if (pf.empty()) {
+        std::cerr << "[MOSSE] update: empty frame\n";
+        score = 0.0f;
+        return false;
+    }
+    if (pf.type() != CV_8U && pf.type() != CV_8UC1) {
+        std::cerr << "[MOSSE] update: invalid input type (must be CV_8U 1-channel), type="
+                  << pf.type() << "\n";
+        score = 0.0f;
+        return false;
+    }
 
-    // float -> double (MOSSE는 Rect2d 참조 필요)
     cv::Rect2d tmp(out_box.x, out_box.y, out_box.width, out_box.height);
 
     bool ok = false;
@@ -70,14 +82,13 @@ bool IR_Tracker_MOSSE::update(const cv::Mat& pf, cv::Rect2f& out_box, float& sco
     }
 
     if (ok) {
-        // double -> float 변환 후 clamp/최소 크기 적용
         cv::Rect2f f((float)tmp.x, (float)tmp.y, (float)tmp.width, (float)tmp.height);
         f = clamp_roi(f, pf.size());
         f.width  = std::max<float>(f.width,  MIN_W);
         f.height = std::max<float>(f.height, MIN_H);
         out_box = f;
     }
-    // score는 사용 안 해도 되지만 인터페이스 상 채움
+
     score = ok ? 1.0f : 0.0f;
     return ok;
 }

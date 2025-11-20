@@ -1,4 +1,4 @@
-// EO_ArUcoThread.cpp (CSV-unified, TL 기반)
+// EO_ArUcoThread.cpp (CSV-unified, TL 기반 + ROI 탐지)
 #include "threads_includes/EO_ArUcoThread.hpp"
 #include "util/telemetry.hpp"
 #include "util/time_util.hpp"                      // now_ms_epoch(), now_us_steady()
@@ -24,7 +24,49 @@ constexpr const char* kTAG = "EO.Aruco";
 
 // 프레임 단위 상세 로그를 켤지(많이 시끄러울 수 있음)
 constexpr bool kVerbosePerFrameLog = false;
-} // namespace
+
+// ──────────────────────────────
+// ROI 상태 (이 스레드에서만 사용)
+// ──────────────────────────────
+cv::Rect2f g_last_box;          // 마지막으로 본 마커 박스(전역 좌표)
+bool       g_have_last_box = false;
+int        g_lost_consec   = 0;
+
+// ROI 튜닝 파라미터
+constexpr int kROI_MARGIN_PX   = 40;  // 마지막 박스 주변 여유 픽셀
+constexpr int kROI_MIN_W       = 40;  // ROI 최소 폭
+constexpr int kROI_MIN_H       = 40;  // ROI 최소 높이
+constexpr int kROI_MAX_LOST    = 10;  // 이만큼 연속으로 못 찾으면 ROI 리셋
+
+// 이미지 크기와 마지막 박스를 기반으로 ROI를 계산
+inline cv::Rect compute_roi(const cv::Size& sz)
+{
+    if (!g_have_last_box || g_lost_consec >= kROI_MAX_LOST) {
+        // ROI 사용하지 않고 전체 프레임
+        return cv::Rect(0, 0, sz.width, sz.height);
+    }
+
+    int x1 = static_cast<int>(std::floor(g_last_box.x)) - kROI_MARGIN_PX;
+    int y1 = static_cast<int>(std::floor(g_last_box.y)) - kROI_MARGIN_PX;
+    int x2 = static_cast<int>(std::ceil (g_last_box.x + g_last_box.width))  + kROI_MARGIN_PX;
+    int y2 = static_cast<int>(std::ceil (g_last_box.y + g_last_box.height)) + kROI_MARGIN_PX;
+
+    x1 = std::max(0, x1);
+    y1 = std::max(0, y1);
+    x2 = std::min(sz.width,  x2);
+    y2 = std::min(sz.height, y2);
+
+    int w = x2 - x1;
+    int h = y2 - y1;
+
+    if (w < kROI_MIN_W || h < kROI_MIN_H) {
+        // 너무 작아지면 다시 전체 프레임
+        return cv::Rect(0, 0, sz.width, sz.height);
+    }
+    return cv::Rect(x1, y1, w, h);
+}
+
+} // namespace anon
 
 EO_ArUcoThread::EO_ArUcoThread(SpscMailbox<std::shared_ptr<EOFrameHandle>>& eo_mb,
                                IArucoPreprocessor&       preproc,
@@ -125,17 +167,22 @@ void EO_ArUcoThread::run() {
             uint64_t t3_us = 0;
             std::string note;
 
-            bool found = false;
+            bool found_any    = false;  // 아무 마커라도 찾았는지
+            bool found_target = false;  // toFindAruco 와 id가 일치하는 마커를 찾았는지
+            int  found_id     = -1;
+
+            // 이번 프레임에서 사용할 ROI (전역 좌표 기준)
+            cv::Rect roi_for_log;       // 로그용
+            cv::Rect roi(0, 0, 0, 0);   // 실제 사용
 
             try {
-                // --- 전처리 ---
+                // --- 전처리: full frame GRAY로 만들기 ---
                 cv::Mat pf;
                 preproc_.run(fr, pf);
                 t1_us = now_us_steady();
 
                 if (pf.empty()) {
                     note = "PRE_EMPTY";
-                    // detect 안 했으므로 t2=t1, t3=t1 로 맞춤
                     t2_us = t1_us;
                     t3_us = t1_us;
 
@@ -157,30 +204,96 @@ void EO_ArUcoThread::run() {
                     continue;
                 }
 
+                // --- ROI 계산 ---
+                cv::Size sz = pf.size();
+                roi = compute_roi(sz);
+                roi_for_log = roi;
+
+                cv::Mat pf_roi = pf(roi);   // 관측 영역만 잘라서 탐지
+
                 // --- 검출 ---
                 std::vector<IArucoDetector::Detection> detections;
-                detections = detector_.detect(pf);
+                detections = detector_.detect(pf_roi);
                 t2_us = now_us_steady();
 
-                found = !detections.empty();
-                int temp_id;
-                if (found) {
+                found_any = !detections.empty();
+
+                // ROI 좌표 → 전역 좌표로 보정하면서 타깃 마커 찾기
+                cv::Rect2f new_last_box;      // ROI 전략용
+                bool      updated_last_box = false;
+
+                if (found_any) {
                     for (auto& d : detections) {
+                        // ROI 기준 → 전역 기준으로 변환
+                        std::array<cv::Point2f,4> corners_global = d.corners;
+                        for (auto& p : corners_global) {
+                            p.x += static_cast<float>(roi.x);
+                            p.y += static_cast<float>(roi.y);
+                        }
+                        cv::Rect2f box_global(
+                            d.bbox.x + roi.x,
+                            d.bbox.y + roi.y,
+                            d.bbox.width,
+                            d.bbox.height
+                        );
+
+                        // ROI 기준 박스 갱신 후보 저장 (첫 마커 기준)
+                        if (!updated_last_box) {
+                            new_last_box      = box_global;
+                            updated_last_box  = true;
+                        }
+
+                        // 우리가 찾고 있는 id와 일치하면 이벤트 발행
                         if (toFindAruco == d.id) {
-                            emit_aruco(d.id, d.corners, d.bbox, fr.ts, fr.seq);
-                            temp_id = d.id;
+                            emit_aruco(d.id, corners_global, box_global,
+                                       fr.ts, fr.seq);
+                            found_target = true;
+                            found_id     = d.id;
+
+                            // ROI 중심을 이 타깃 박스로 맞추도록 저장
+                            new_last_box     = box_global;
+                            updated_last_box = true;
+
                             if (toFindAruco != 3 &&
-                                is_big_enough(static_cast<int>(d.bbox.width),
-                                              static_cast<int>(d.bbox.height))) {
+                                is_big_enough(static_cast<int>(box_global.width),
+                                              static_cast<int>(box_global.height))) {
                                 toFindAruco++;
                             }
                         }
                     }
 
-                    note = "FOUND:id=" + std::to_string(temp_id);
+                    if (found_target) {
+                        note = "FOUND:id=" + std::to_string(found_id);
+                    } else {
+                        note = "FOUND_OTHER";  // 마커는 있으나 원하는 id는 아님
+                    }
+
+                    // ROI 상태 갱신
+                    if (updated_last_box) {
+                        g_last_box      = new_last_box;
+                        g_have_last_box = true;
+                        g_lost_consec   = 0;
+                    }
                 } else {
+                    // 이번 프레임에서는 아무 마커도 발견 못함
                     note = "LOST";
+
+                    if (g_have_last_box) {
+                        g_lost_consec++;
+                        if (g_lost_consec >= kROI_MAX_LOST) {
+                            // 일정 프레임 이상 못 찾았으면 ROI 리셋 → 다음 프레임부터 전체 프레임 탐색
+                            g_have_last_box = false;
+                            note += ";ROI_RESET";
+                        }
+                    }
                 }
+
+                // ROI 정보도 note에 추가
+                note += ";ROI=(" +
+                        std::to_string(roi_for_log.x) + "," +
+                        std::to_string(roi_for_log.y) + "," +
+                        std::to_string(roi_for_log.width) + "x" +
+                        std::to_string(roi_for_log.height) + ")";
 
                 if (kVerbosePerFrameLog) {
                     double pre_ms   = (t1_us >= t0_us)
@@ -195,10 +308,14 @@ void EO_ArUcoThread::run() {
                                 << " pre_ms=" << pre_ms
                                 << " det_ms=" << det_ms
                                 << " total_ms=" << total_ms
-                                << " n=" << detections.size();
+                                << " n=" << detections.size()
+                                << " roi=(" << roi_for_log.x << ","
+                                            << roi_for_log.y << ","
+                                            << roi_for_log.width << "x"
+                                            << roi_for_log.height << ")";
                 }
 
-                // 통계 갱신 (t3_us 를 이따 확정하고 나서)
+                // 통계 갱신
                 t3_us = now_us_steady();
                 double total_ms = (t3_us >= t0_us)
                                   ? (double)(t3_us - t0_us) / 1000.0
@@ -208,7 +325,7 @@ void EO_ArUcoThread::run() {
                 stat_sum_ms += total_ms;
                 stat_max_ms = std::max(stat_max_ms, total_ms);
                 stat_min_ms = std::min(stat_min_ms, total_ms);
-                if (found) stat_found++; else stat_lost++;
+                if (found_any) stat_found++; else stat_lost++;
 
                 CSV_LOG_TL("EO.Aruco",
                            fr.seq,

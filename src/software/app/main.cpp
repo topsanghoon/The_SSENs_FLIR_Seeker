@@ -36,6 +36,8 @@
 
 #include "components/includes/IR_Preprocessor.hpp"
 #include "components/includes/IR_Tracker_MOSSE.hpp"
+#include "components/includes/IR_Tracker_KCF.hpp"
+#include "components/includes/IR_Tracker_CSRT.hpp"
 #include "components/includes/EO_ArucoDetector_OpenCV.hpp"
 #include "components/includes/TargetFusion.hpp"
 #include "components/includes/IController.hpp"
@@ -166,8 +168,10 @@ int main(int, char**) {
     // --- IR Tracking ---
     IR_Preprocessor  ir_pre(1.0f/16383.0f, 0.0f);
     IR_Tracker_MOSSE ir_mosse;
+    IR_Tracker_KCF ir_kcf;
+    IR_Tracker_CSRT ir_csrt;
     IRTrackConfig    trk_cfg{}; trk_cfg.user_req_threshold = 15;
-    IR_TrackThread   ir_track(mb_ir_trk, mb_click, ir_mosse, ir_pre, bus, trk_cfg);
+    IR_TrackThread   ir_track(mb_ir_trk, mb_click, ir_kcf, ir_pre, bus, trk_cfg);
 
     // --- EO ArUco ---
     EO_ArucoDetector_OpenCV aruco(cv::aruco::DICT_4X4_50);

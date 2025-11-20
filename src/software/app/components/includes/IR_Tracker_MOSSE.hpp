@@ -7,12 +7,13 @@
 
 namespace flir {
 
-// 실제 동작하는 MOSSE 트래커
+// MOSSE 트래커 (입력: 8bit 그레이 이미지)
 class IR_Tracker_MOSSE : public ITrackerStrategy {
 public:
     IR_Tracker_MOSSE();
 
     // ITrackerStrategy 인터페이스 구현
+    // pf: CV_8UC1 (IR_Preprocessor 출력)
     bool init(const cv::Mat& pf, const cv::Rect2f& box) override;
     bool update(const cv::Mat& pf, cv::Rect2f& out_box, float& score) override;
 
