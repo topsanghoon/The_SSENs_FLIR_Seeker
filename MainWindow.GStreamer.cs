@@ -131,7 +131,7 @@ namespace TheSSENS
                     _pipelineLeft = null;
                     return;
                 }
-                AppendLog("[INFO] 왼쪽(IR) 수신 시작 :5002");
+                AppendLog($"[{System.DateTime.Now:HH:mm:ss}] 적외선 영상 스트림 수신 준비 완료");
             }
             catch (Exception ex)
             {
@@ -163,7 +163,7 @@ namespace TheSSENS
                 {
                     int currentIndex = temp % 4;
                     _leftImageOverlay?.UpdateImage(currentIndex);
-                    AppendLog($"[INFO] Left signal detected. Overlay set to 'Frame_{currentIndex + 1}'.");
+                    //AppendLog($"[INFO] Left signal detected. Overlay set to 'Frame_{currentIndex + 1}'.");
                 });
             }
             // (성능 최적화: 타이머 리셋용 Invoke는 제거된 상태 유지)
@@ -414,7 +414,7 @@ namespace TheSSENS
                     _pipelineRight = null;
                     return;
                 }
-                AppendLog("[INFO] 오른쪽(EO) 수신 시작 :5003 (appsink)");
+                AppendLog($"[{System.DateTime.Now:HH:mm:ss}] 가시광 영상 스트림 수신 준비 완료");
             }
             catch (Exception ex)
             {
@@ -446,7 +446,7 @@ namespace TheSSENS
                 {
                     int currentIndex = temp % 4;
                     _rightImageOverlay?.UpdateImage(currentIndex);
-                    AppendLog($"[INFO] Right signal detected (AppSink). Overlay set to 'Frame_{currentIndex + 1}'.");
+                    //AppendLog($"[INFO] Right signal detected (AppSink). Overlay set to 'Frame_{currentIndex + 1}'.");
                 });
             }
             // (성능 최적화: 타이머 리셋용 Invoke는 제거된 상태 유지)
@@ -507,7 +507,7 @@ namespace TheSSENS
                     _isLeftOverlayActive = false; // 1. 오버레이 상태를 "Lost"로 변경
                                                   // 2. "Lost" 상태로 1번만 PNG 업데이트
                     _leftImageOverlay?.UpdateImage(-1);
-                    AppendLog("[WARN] Left signal lost (timeout). Overlay set to 'No Signal'.");
+                    //AppendLog("[WARN] Left signal lost (timeout). Overlay set to 'No Signal'.");
                 }
             }
             _leftSignalTimer?.Start(); // 다음 2초 체크 시작
@@ -528,7 +528,7 @@ namespace TheSSENS
                         _isLeftSignalActive = false;
                         // 2. "Lost" 상태로 1번만 PNG 업데이트
                         _leftImageOverlay?.UpdateImage(-1);
-                        AppendLog("[WARN] Left signal lost (EOS/Error). Overlay set to 'No Signal'.");
+                        //AppendLog("[WARN] Left signal lost (EOS/Error). Overlay set to 'No Signal'.");
                     }
                 });
             }
@@ -552,7 +552,7 @@ namespace TheSSENS
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
                         _rightImageOverlay?.UpdateImage(-1);
-                        AppendLog("[WARN] Right signal lost (timeout). Overlay set to 'No Signal'.");
+                        //AppendLog("[WARN] Right signal lost (timeout). Overlay set to 'No Signal'.");
                     });
                 }
             }
@@ -577,7 +577,7 @@ namespace TheSSENS
                             _isRightSignalActive = false;
                             // 2. "Lost" 상태로 1번만 PNG 업데이트
                             _rightImageOverlay?.UpdateImage(-1);
-                            AppendLog("[WARN] Right signal lost (EOS/Error). Overlay set to 'No Signal'.");
+                            //AppendLog("[WARN] Right signal lost (EOS/Error). Overlay set to 'No Signal'.");
                         }
                     });
                     break;

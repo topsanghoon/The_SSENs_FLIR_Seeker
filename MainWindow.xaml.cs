@@ -203,7 +203,7 @@ namespace TheSSENS
                     _hbClock.Stop(); // 스톱워치 중지
                     DisableFlyStatusMid();
                     DisableFlyStatusEnd();
-                    AppendLog("[SYSTEM] HB 수신 중단 (Timeout)");
+                    //AppendLog("[SYSTEM] HB 수신 중단 (Timeout)");
                 }
             };
         }
@@ -218,9 +218,9 @@ namespace TheSSENS
         }
         private void ZoomOutMap()
         {
-            MapControl.Zoom = 6;
-            MapControl.MinZoom = 6;
-            MapControl.MaxZoom = 6;
+            MapControl.Zoom = 8;
+            MapControl.MinZoom = 8;
+            MapControl.MaxZoom = 8;
             MapControl.ShowCenter = false;
             MapControl.CanDragMap = true;
         }
@@ -375,13 +375,13 @@ namespace TheSSENS
             g.DrawImage(bmp, dest, new Rectangle(0, 0, bmp.Width, bmp.Height), GraphicsUnit.Pixel);
             bmp.Dispose();
 
-            // [FPS 텍스트 그리기]
-            using (var font = new Font("Consolas", 12, System.Drawing.FontStyle.Bold))
-            using (var brush = new SolidBrush(Color.LimeGreen)) // 잘 보이게 라임색
-            {
-                string fpsText = $"IR FPS: {_fpsLeft:F1}"; // 소수점 1자리까지 표시
-                g.DrawString(fpsText, font, brush, new PointF(5, 5));
-            }
+            //// [FPS 텍스트 그리기]
+            //using (var font = new Font("Consolas", 12, System.Drawing.FontStyle.Bold))
+            //using (var brush = new SolidBrush(Color.LimeGreen)) // 잘 보이게 라임색
+            //{
+            //    string fpsText = $"IR FPS: {_fpsLeft:F1}"; // 소수점 1자리까지 표시
+            //    g.DrawString(fpsText, font, brush, new PointF(5, 5));
+            //}
 
             if (_hasBox)
             {
@@ -471,13 +471,13 @@ namespace TheSSENS
             );
             bmp.Dispose();
 
-            // [FPS 텍스트 그리기]
-            using (var font = new Font("Consolas", 12, System.Drawing.FontStyle.Bold))
-            using (var brush = new SolidBrush(Color.LimeGreen))
-            {
-                string fpsText = $"EO FPS: {_fpsRight:F1}";
-                g.DrawString(fpsText, font, brush, new PointF(5, 5));
-            }
+            //// [FPS 텍스트 그리기]
+            //using (var font = new Font("Consolas", 12, System.Drawing.FontStyle.Bold))
+            //using (var brush = new SolidBrush(Color.LimeGreen))
+            //{
+            //    string fpsText = $"EO FPS: {_fpsRight:F1}";
+            //    g.DrawString(fpsText, font, brush, new PointF(5, 5));
+            //}
 
             if (_arucoHas && _eoSrcW > 0 && _eoSrcH > 0)
             {
@@ -574,7 +574,7 @@ namespace TheSSENS
             if (ArmSelfDestructToggle.IsChecked == true)
             {
                 SendCmd("SELF_DESTRUCT"); // (UDP.cs에 정의)
-                AppendLog($"[{SysDateTime.Now:HH:mm:ss}] [INFO] 자폭 실행");
+                AppendLog($"[{SysDateTime.Now:HH:mm:ss}] 자폭 실행");
                 DisableFlyStatusEnd();
 
                 // [추가] 사용 후 즉시 토글을 끔 (안전을 위해)
@@ -647,7 +647,7 @@ namespace TheSSENS
                     iy = Math.Max(0, Math.Min(IR_HEIGHT - 1, iy));
 
                     // 3. =========[수정] 로그 주석 해제 (작동 확인용) =========
-                    AppendLog($"[DES] click ix={ix}, iy={iy}");
+                    AppendLog($"[{System.DateTime.Now:HH:mm:ss}] ({ix}, {iy}) 위치의 표적 추적을 시도합니다");
 
                     // SendClickBinary (UDP.cs) 또는 FindResource 에서 오류가 발생할 가능성이 높습니다.
                     SendClickBinary((float)ix, (float)iy); // (UDP.cs에 정의)
@@ -693,7 +693,7 @@ namespace TheSSENS
         // ===== 필터 버튼 =====
         private void SD_Click(object sender, RoutedEventArgs e)
         {
-            AppendLog($"[{System.DateTime.Now:HH:mm:ss}] [INFO] 필터 전환");
+            AppendLog($"[{System.DateTime.Now:HH:mm:ss}] 필터 전환");
             temp++;
             int newIndex = temp % 4;
             if (_isLeftSignalActive) _leftImageOverlay?.UpdateImage(newIndex);
@@ -820,12 +820,12 @@ namespace TheSSENS
                 if (status)
                 {
                     StatusIndicatorCircle_1.Fill = Media.Brushes.GreenYellow;
-                    StatusIndicatorText_1.Text = "안정";
+                    //StatusIndicatorText_1.Text = "안정";
                 }
                 else
                 {
                     StatusIndicatorCircle_1.Fill = Media.Brushes.Red;
-                    StatusIndicatorText_1.Text = "연결 끊김";
+                    //StatusIndicatorText_1.Text = "연결 끊김";
                 }
                 //switch (status) {
                 //    case 2:

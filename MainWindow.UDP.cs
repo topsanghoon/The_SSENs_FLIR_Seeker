@@ -106,12 +106,12 @@ namespace TheSSENS
                     {
                         if (remain < 8) { AppendLog("[META] HB too short"); break; }
                         ulong ts = ReadU64LE(buf, p);
-                        AppendLog($"[META][HB] ts={ts}");
+                        //AppendLog($"[META][HB] ts={ts}");
                         _hbClock.Restart();
 
                         if (!_isHbConnected)
                         {
-                            AppendLog("[SYSTEM] HB 수신 재개됨.");
+                            //AppendLog("[SYSTEM] HB 수신 재개됨.");
 
                         }
 
@@ -124,7 +124,7 @@ namespace TheSSENS
                         if (remain < 12) { AppendLog("[META] CTRL too short"); break; }
                         ulong ts = ReadU64LE(buf, p + 0);
                         int val = (int)ReadU32LE(buf, p + 8);
-                        AppendLog($"[META][CTRL] ts={ts} val={val}");
+                        //AppendLog($"[META][CTRL] ts={ts} val={val}");
 
 
 
@@ -203,7 +203,7 @@ namespace TheSSENS
                         float h = ReadF32LE(buf, p + off + 12);
                         float score = ReadF32LE(buf, p + off + 16);
 
-                        AppendLog($"[META][TRACK] seq={seq} ts={ts} box=({x:F1},{y:F1},{w:F1},{h:F1}) score={score:F3}");
+                        //AppendLog($"[META][TRACK] seq={seq} ts={ts} box=({x:F1},{y:F1},{w:F1},{h:F1}) score={score:F3}");
                         break;
                     }
                 case 0x02: // ARUCO
@@ -226,7 +226,7 @@ namespace TheSSENS
                         now_id = id;
                         ApplyExternalRange(OutRange(h)); // 약 35(최대) 이하 부터는 탐지 못함
 
-                        AppendLog($"[META][ARUCO] id={id} ts={ts} box=({x:F1},{y:F1},{w:F1},{h})");
+                        //AppendLog($"[META][ARUCO] id={id} ts={ts} box=({x:F1},{y:F1},{w:F1},{h})");
                         break;
                     }
 
@@ -414,7 +414,7 @@ namespace TheSSENS
             System.Buffer.BlockCopy(yb, 0, pkt, 5, 4);
 
             _cmdTx.Send(pkt, pkt.Length, _cmdRemoteEp);
-            AppendLog($"[TX BIN→{_cmdRemoteEp.Address}:{_cmdRemoteEp.Port}] CLICK x={x:F1}, y={y:F1}");
+            //AppendLog($"[TX BIN→{_cmdRemoteEp.Address}:{_cmdRemoteEp.Port}] CLICK x={x:F1}, y={y:F1}");
         }
 
 
@@ -432,7 +432,7 @@ namespace TheSSENS
                 msg = (level >= 0) ? $"SD {level}" : "SD";
                 var data = Encoding.UTF8.GetBytes(msg);
                 _cmdTx.Send(data, data.Length, _cmdRemoteEp);
-                AppendLog($"[TX→{_cmdRemoteEp.Address}:{_cmdRemoteEp.Port}] {msg}");
+                //AppendLog($"[TX→{_cmdRemoteEp.Address}:{_cmdRemoteEp.Port}] {msg}");
             }
             catch (Exception ex)
             {
@@ -462,7 +462,7 @@ namespace TheSSENS
                 _metaRx.Client.ExclusiveAddressUse = false;
                 _metaRx.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 _metaRx.Client.Bind(new IPEndPoint(IPAddress.Any, META_LOCAL_PORT));
-                AppendLog($"[META] 수신 대기 시작 :{META_LOCAL_PORT}/udp");
+                AppendLog($"[{System.DateTime.Now:HH:mm:ss}] 탐지 및 추적 정보 수신 준비 완료");
             }
             catch (Exception ex)
             {
@@ -514,7 +514,7 @@ namespace TheSSENS
 
                         await Dispatcher.InvokeAsync(() =>
                         {
-                            AppendLog($"[META][RX] {res.RemoteEndPoint.Address}:..."); // 매번 로그 (이건 괜찮음)
+                            //AppendLog($"[META][RX] {res.RemoteEndPoint.Address}:..."); // 매번 로그 (이건 괜찮음)
 
                             if (n >= 4 && buf != null && buf[0] == 0x01 && (buf[1] >= 0x01 && buf[1] <= 0x05))
                             {

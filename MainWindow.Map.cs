@@ -207,7 +207,7 @@ namespace TheSSENS
             }
 
             MapControl.Markers.Add(_missileMarker);
-            AppendLog($"[INFO] 미사일 아이콘 배치: ({_missileLat:F4}, {_missileLng:F4})");
+            //AppendLog($"[INFO] 미사일 아이콘 배치: ({_missileLat:F4}, {_missileLng:F4})");
         }
 
         // ===== 지도 카메라 =====
@@ -856,7 +856,7 @@ namespace TheSSENS
             UpdateMapCenter();
 
             Dispatcher.Invoke(() => SetScenarioUIState(false, null));
-            AppendLog("[INFO] 임무 종료. 초기 화면으로 복귀.");
+            //AppendLog("[INFO] 임무 종료. 초기 화면으로 복귀.");
         }
     }
 }

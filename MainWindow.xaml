@@ -9,6 +9,7 @@
         Focusable="True"
         FocusManager.FocusedElement="{Binding RelativeSource={RelativeSource Self}}"
         Title="Cruise Missile Control GUI" Height="600" Width="1000"
+        WindowStyle ="None"
         ContentRendered="Window_ContentRendered" Closing="Window_Closing"
         KeyDown="Window_KeyDown">
 
@@ -173,19 +174,19 @@
 
     <Grid Background="{StaticResource windowback}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="125*"/>
-            <ColumnDefinition Width="125*"/>
-            <ColumnDefinition Width="125*"/>
-            <ColumnDefinition Width="125*"/>
-            <ColumnDefinition Width="125*"/>
-            <ColumnDefinition Width="125*"/>
-            <ColumnDefinition Width="125*"/>
-            <ColumnDefinition Width="125*"/>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="1*"/>
         </Grid.ColumnDefinitions>
 
         <Grid.RowDefinitions>
-            <RowDefinition Height="375*"/>
-            <RowDefinition Height="225*"/>
+            <RowDefinition Height="6*"/>
+            <RowDefinition Height="4*"/>
         </Grid.RowDefinitions>
 
         <Border x:Name="LeftBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" BorderThickness="5" BorderBrush="{StaticResource side}" Margin="5">
@@ -261,7 +262,7 @@
                     <RowDefinition Height="2*"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Column="0" Grid.Row="1" Orientation="Vertical" VerticalAlignment="Top" Margin="5,0,5,0">
+                <StackPanel Grid.Column="0" Grid.Row="1" Orientation="Vertical" VerticalAlignment="Bottom" Margin="5,0,5,0">
                     <Border BorderBrush="{StaticResource side}" BorderThickness="1" Margin="0,3,0,3">
                         <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="3">
                             <TextBlock Text="미익 1" Foreground="{StaticResource inerindex}" FontSize="9" HorizontalAlignment="Center"/>
@@ -279,12 +280,13 @@
 
                 <Border Grid.Column="1" 
                 Grid.Row="0"
-                Grid.RowSpan="2">
+                Grid.RowSpan="2"
+                VerticalAlignment="Bottom">
 
                     <Image x:Name="AircraftImage" Source="\Images\missile2.png" Stretch="Uniform"/>
                 </Border>
 
-                <StackPanel Grid.Column="2" Grid.Row="1" Orientation="Vertical" VerticalAlignment="Top" Margin="5,0,5,0">
+                <StackPanel Grid.Column="2" Grid.Row="1" Orientation="Vertical" VerticalAlignment="Bottom" Margin="5,0,5,0">
                     <Border BorderBrush="{StaticResource side}" BorderThickness="1" Margin="0,3,0,3">
                         <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="3">
                             <TextBlock Text="미익 2" Foreground="{StaticResource inerindex}" FontSize="9" HorizontalAlignment="Center"/>
@@ -308,7 +310,7 @@
             <Grid Background="Transparent">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="1*"/>
-                    <ColumnDefinition Width="1.1*"/>
+                    <ColumnDefinition Width="0.5*"/>
                     <ColumnDefinition Width="1*"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
@@ -320,16 +322,17 @@
                             Orientation="Vertical" 
                             VerticalAlignment="Top" 
                             Margin="5,5,0,0">
+                    
                     <StackPanel Orientation="Horizontal">
                         <Ellipse x:Name="StatusIndicatorCircle_1"
-                            Width="12" Height="12"
+                            Width="20" Height="20"
                             Fill="Red"
                             Stroke="Black" StrokeThickness="1"
                             VerticalAlignment="Center"/>
                         <TextBlock x:Name="StatusIndicatorText_1"
                             Text="통신 상태"
                             Foreground="White"
-                            FontSize="10"
+                            FontSize="15"
                             FontWeight="Bold"
                             Margin="5,0,0,0"
                             VerticalAlignment="Center"/>
@@ -337,38 +340,38 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="0" Grid.Row="0" 
-            Orientation="Horizontal" 
-            HorizontalAlignment="Left" 
-            VerticalAlignment="Top" 
-            Margin="5,25,0,0">
+                            Orientation="Horizontal" 
+                            HorizontalAlignment="Left" 
+                            VerticalAlignment="Top" 
+                            Margin="5,30,0,0">
                     <Ellipse x:Name="FlyStatusIndicatorCircle_Mid" 
-             Width="12" Height="12" 
-             Fill="Red"  
-             Stroke="Black" StrokeThickness="1"
-             VerticalAlignment="Center"/>
+                            Width="20" Height="20" 
+                            Fill="Red"  
+                            Stroke="Black" StrokeThickness="1"
+                            VerticalAlignment="Center"/>
                     <TextBlock x:Name="FlyStatusIndicatorText_Mid" 
-               Text="중기 유도" 
-               Foreground="White" 
-               FontSize="10" 
-               FontWeight="Bold"
-               Margin="5,0,0,0" 
-               VerticalAlignment="Center"/>
+                               Text="중기 유도" 
+                               Foreground="White" 
+                               FontSize="15" 
+                               FontWeight="Bold"
+                               Margin="5,0,0,0" 
+                               VerticalAlignment="Center"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="0" Grid.Row="0" 
                         Orientation="Horizontal" 
                         HorizontalAlignment="Left" 
                         VerticalAlignment="Top" 
-                        Margin="5,45,0,0">
+                        Margin="5,55,0,0">
                     <Ellipse x:Name="FlyStatusIndicatorCircle_End" 
-                         Width="12" Height="12" 
+                         Width="20" Height="20" 
                          Fill="Red"  
                          Stroke="Black" StrokeThickness="1"
                          VerticalAlignment="Center"/>
                     <TextBlock x:Name="FlyStatusIndicatorText_End" 
                            Text="종말 유도" 
                            Foreground="White" 
-                           FontSize="10" 
+                           FontSize="15" 
                            FontWeight="Bold"
                            Margin="5,0,0,0" 
                            VerticalAlignment="Center"/>
@@ -380,7 +383,7 @@
                         <RowDefinition/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <ProgressBar x:Name="Scroll_1Bar" Grid.Row="0" Width="10" Value="50" Minimum="0" Maximum="100"
+                    <ProgressBar x:Name="Scroll_1Bar" Grid.Row="0" Width="10" Value="0" Minimum="0" Maximum="100"
          Style="{StaticResource VerticalScrollProgressBarStyle}" 
          Margin="12,2,12,15" Grid.RowSpan="3"/>
                     <TextBlock Grid.Row="2" Text="스크롤 1" Foreground="{StaticResource inerindex}" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0"/>
@@ -391,7 +394,7 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <ProgressBar x:Name="Scroll_2Bar" Grid.Row="0" Width="10" Value="50" Minimum="0" Maximum="100"
+                    <ProgressBar x:Name="Scroll_2Bar" Grid.Row="0" Width="10" Value="0" Minimum="0" Maximum="100"
          Style="{StaticResource VerticalScrollProgressBarStyle}" 
          Margin="0,2,0,0" VerticalAlignment="Stretch"/>
                     <TextBlock Grid.Row="1" Text="스크롤 2" Foreground="{StaticResource inerindex}" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0"/>
@@ -406,24 +409,34 @@
             </Grid.RowDefinitions>
             <Border Grid.Row="0" BorderBrush="{StaticResource side}" BorderThickness="3" Margin="5" Background="{StaticResource inerback}">
                 <Grid>
-                    <UniformGrid x:Name="ScenarioSelectionGrid" Rows="3" Columns="1" Margin="5">
-                        <Button x:Name="Scenario1Button" Margin="2" Style="{StaticResource ClickableButtonStyle}" Click="Scenario1_Click">
-                            <TextBlock Text="시나리오 1: 평양 타격" FontSize="12" FontWeight="Bold"/>
+                    <UniformGrid x:Name="ScenarioSelectionGrid" Rows="3" Columns="1" Margin="1">
+                        <Button x:Name="Scenario1Button" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="Scenario1_Click">
+                            <Viewbox>
+                                <TextBlock Text="시나리오:" FontWeight="Bold" Margin="2"/>
+                            </Viewbox>
                         </Button>
-                        <Button x:Name="Scenario2Button" Margin="2" Style="{StaticResource ClickableButtonStyle}" Click="Scenario2_Click">
-                            <TextBlock Text="시나리오 2: 동해 기지 타격" FontSize="12" FontWeight="Bold"/>
+
+                        <Button x:Name="Scenario2Button" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="Scenario2_Click">
+                            <Viewbox>
+                                <TextBlock Text="시나리오 2:" FontWeight="Bold" Margin="2"/>
+                            </Viewbox>
                         </Button>
-                        <Button x:Name="Scenario3Button" Margin="2" Style="{StaticResource ClickableButtonStyle}" Click="Scenario3_Click">
-                            <TextBlock Text="시나리오 3: 방공망 회피" FontSize="12" FontWeight="Bold"/>
+
+                        <Button x:Name="Scenario3Button" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="Scenario3_Click">
+                            <Viewbox>
+                                <TextBlock Text="시나리오 3:" FontWeight="Bold" Margin="2"/>
+                            </Viewbox>
                         </Button>
                     </UniformGrid>
 
                     <!-- 시나리오 진행 뷰 -->
                     <Grid x:Name="ScenarioInProgressGrid" Visibility="Collapsed">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="2*"/>
+                            <RowDefinition Height="1*"/>
                         </Grid.RowDefinitions>
+                        
+                        
                         <TextBlock x:Name="MissionDetailsText" Grid.Row="0" 
                                    Text="시나리오 1 진행 중..." 
                                    Foreground="{StaticResource inerindex}" 
@@ -431,20 +444,25 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    TextWrapping="Wrap" Margin="5"/>
 
-                        <Button x:Name="StartMissionButton" Grid.Row="1" Content="임무 시작" 
-                                Style="{StaticResource ClickableButtonStyle}" 
-                                Height="30" Margin="5" Click="StartMission_Click"/>
+                        <UniformGrid Grid.Row="1" Rows="1" Columns="1" Margin="1">
+                            <Button x:Name="StartMissionButton" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="StartMission_Click">
+                                <Viewbox>
+                                    <TextBlock Text="임무 시작" FontWeight="Bold" Margin="2"/>
+                                </Viewbox>
+                            </Button>
 
-                        <Button x:Name="AbortMissionButton" Grid.Row="1" Content="임무 종료" 
-                                Style="{StaticResource DangerButtonStyle}" 
-                                Height="30" Margin="5" Click="AbortMission_Click"
-                                Visibility="Collapsed"/>
+                            <Button x:Name="AbortMissionButton" Margin="5" Style="{StaticResource DangerButtonStyle}" Click="AbortMission_Click" Visibility="Collapsed">
+                                <Viewbox>
+                                    <TextBlock Text="임무 종료" FontWeight="Bold" Margin="2"/>
+                                </Viewbox>
+                            </Button>
+                        </UniformGrid>
                     </Grid>
                 </Grid>
             </Border>
 
-            <Border Grid.Row="1" BorderBrush="{StaticResource side}" BorderThickness="3" Margin="4" Background="{StaticResource inerback}">
-                <UniformGrid Rows="3" Columns="1" Margin="3">
+            <Border Grid.Row="1" BorderBrush="{StaticResource side}" BorderThickness="3" Margin="5" Background="{StaticResource inerback}">
+                <UniformGrid Rows="3" Columns="1" Margin="1">
 
                     <Button Name="DES" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="DES_Click">
                         <Viewbox>

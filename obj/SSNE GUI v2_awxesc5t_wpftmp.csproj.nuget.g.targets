@@ -1,0 +1,6 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)sourcegear.sqlite3\3.50.4.2\buildTransitive\net8.0\SourceGear.sqlite3.targets" Condition="Exists('$(NuGetPackageRoot)sourcegear.sqlite3\3.50.4.2\buildTransitive\net8.0\SourceGear.sqlite3.targets')" />
+  </ImportGroup>
+</Project>
