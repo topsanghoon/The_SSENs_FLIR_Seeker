@@ -269,6 +269,7 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
                    oss.str());
         return;
     }
+    
 
     // 3) 그 외는 조용히 드롭 (경고 + 선택적 TL)
     LOGW(TAG, "unrecognized msg ...");

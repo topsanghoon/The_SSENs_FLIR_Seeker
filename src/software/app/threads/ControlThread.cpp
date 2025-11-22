@@ -268,6 +268,7 @@ bool ControlThread::drain_events() {
                             std::to_string(x.seq) +
                             ",level=" + std::to_string(x.level));
             } break;
+            
 
             default:
                 break;

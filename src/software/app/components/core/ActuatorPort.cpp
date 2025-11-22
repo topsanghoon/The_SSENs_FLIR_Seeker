@@ -116,7 +116,7 @@ void UART_ActuatorPort::send_start_signal() {
     if (fd_ == -1) {
         return;
     }
-    int desired = 109;          // 설계상 START 코드
+    int desired = 111;          // 설계상 START 코드
     int8_t val = clamp_to_i8(desired);
     (void)::write(fd_, &val, sizeof(val));
 }

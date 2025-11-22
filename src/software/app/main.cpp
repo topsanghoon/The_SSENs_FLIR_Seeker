@@ -229,6 +229,7 @@ int main(int, char**) {
 
     meta_tx.start();
     net_rx.start();
+    
     control.start();
 
     std::cout << "[INFO] Midcourse start. Ctrl+C to exit.\n";
