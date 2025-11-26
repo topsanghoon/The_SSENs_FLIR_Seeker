@@ -1,18 +1,26 @@
 # The_SSENs_FLIR_Seeker
 
 ## 📌 프로젝트 개요
-The_SSENs_FLIR_Seeker는 **FLIR(Forward Looking Infrared) 기반 탐색 및 추적 시스템**을 모사하는 프로젝트입니다.  
+The_SSENs_FLIR_Seeker는 ****적외선 표적 추적 시스템****을 모사하는 프로젝트입니다.  
 본 프로젝트는 실제 미사일 시커(seeker)의 기능을 학습/실험하는 것을 목표로 하며, 임베디드 보드(Zynq, STM32 등)와 열화상 센서를 기반으로 동작합니다.
 
 ---
+
+## 프로젝트 목표
+- 가시광/적외선 영상 획득 및 송수신 구현
+- 중기 유도 단계에서 가시광 영상 기반 영상 대조 항법 구현
+- 종말 유도 단계에서 적외선 영상 기반 표적 추적 시스템 구현
+- 종말 유도 단계에서 운용자가 표적을 지정할 수 있는 맨 인더 루프(Man In the Loop) 시스템 구현
+- 표적 정보를 바탕으로 유도 명령 생성하고 구동부를 제어하여 유도조종기능 구현
+- 미사일 운용에 필요한 기능과 상호작용 가능한 운용자 인터페이스 구현
+
+  ---
 
 ## 📂 디렉토리 구조
 
 ```
 The_SSENs_FLIR_Seeker/
 │
-├── docs/ # 문서, 기술 설명, 회의록
-│ └── README.md
 │
 ├── src/ # 주요 소스 코드
 │ ├── firmware/ # 펌웨어 (임베디드 보드용, 예: STM32, Zynq)
@@ -41,26 +49,17 @@ The_SSENs_FLIR_Seeker/
 ---
 
 ## 🛠 개발 환경
-- **임베디드 보드**: Zynq 7010, STM32F4 계열
-- **센서**: FLIR Lepton 3.0 (8Hz)
-- **OS**: FreeRTOS, Embedded Linux (PetaLinux)
-- **언어**: C, C++, Python
-- **도구**: Vivado, CubeMX, OpenCV, QGIS (지형 데이터)
-
----
-
-## 📜 진행 계획
-1. 센서 데이터 획득 및 시각화
-2. 간단한 추적 알고리즘 구현 (Python 기반)
-3. 임베디드 보드 이식 (Zynq)
-4. 실시간 처리 최적화
-5. 전체 시스템 통합 및 시뮬레이션
+- **임베디드 보드**: Zynq 7010, Arduino(atmega 328p)
+- **센서**: FLIR Lepton 1.6
+- **OS**: Petalinux
+- **언어**: C, C++, C#
+- **도구**: Vivado, Petalinux(OpenCV, gstreamer), Arduino IDE, WPF
 
 ---
 
 ## 👥 팀 정보
-- **팀명**: The SSEN
-- **프로젝트명**: FLIR Seeker
+- **팀명**: The SSENs
+- **프로젝트명**: 적외선 표적 추적 시스템 개발
 
 📌 역할 분담
 
