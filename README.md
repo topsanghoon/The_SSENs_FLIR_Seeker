@@ -42,9 +42,9 @@ The_SSENs_FLIR_Seeker/
 
 ## 🚀 주요 기능
 - 열화상 카메라(FLIR Lepton 기반) 데이터 수집
-- 임베디드 보드 상 실시간 처리 (Zynq + RTOS / Linux)
+- 임베디드 보드 상 실시간 처리 (Zynq + Petalinux)
 - 타겟 탐색 및 추적 알고리즘
-- 시뮬레이션 환경 제공 (Python/C++ 기반)
+- 시뮬레이션 환경 제공 (C# WPF 기반)
 
 ---
 
