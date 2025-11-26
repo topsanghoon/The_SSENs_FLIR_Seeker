@@ -52,7 +52,9 @@ private:
     // --- seq 특성: T::seq 멤버가 있으면 그 값을 latest_seq_로 사용; 없으면 내부 증가 카운터 사용
     template <typename U>
     static auto has_seq_member(int) -> decltype((void)std::declval<U>().seq, std::true_type{});
-    template <typename> static auto has_seq_member(...) -> std::false_type;
+    template <typename>
+    static auto has_seq_member(...) -> std::false_type;
+    
     static constexpr bool kHasSeq = decltype(has_seq_member<T>(0))::value;
 
     uint32_t extract_seq_(const T& item) {
