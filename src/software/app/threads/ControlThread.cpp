@@ -61,7 +61,11 @@ ControlThread::ControlThread(IEventBus& bus,
     // ★ 타임아웃 기준/상태 초기화
     last_ctrl_tp_            = clock_t::now();
     neutral_sent_after_loss_ = false;
-    use_timeout_wait_        = true;   // 처음에는 타임아웃 감시 ON
+
+
+    // ★ 처음에는 "START 전" 상태
+    started_.store(false);
+    use_timeout_wait_ = false;   // ← 타임아웃 감시 OFF
 }
 
 void ControlThread::start() {
@@ -83,12 +87,6 @@ void ControlThread::start() {
 
     // ★ 프로그램 시작 직후 UART로 start 신호 전송
     act_.send_start_signal();
-
-    // ★ 프로그램 시작 메타 신호 전송 (예: 8001)
-    const uint64_t ts = flir::now_ns_steady();
-    CtrlCmd start_cmd = CtrlCmd::make_start_signal();
-    Event ev_start{ EventType::MetaCtrl, MetaCtrlEvent{ start_cmd.to_int(), ts } };
-    bus_.push(ev_start, Topic::Control);
 }
 
 void ControlThread::stop() {
@@ -127,23 +125,19 @@ void ControlThread::run() {
 
     static std::uint64_t seq_counter = 0;
 
-    while (running_.load()) {
+     while (running_.load()) {
         bool woke_by_evt = false;
         {
             std::unique_lock<std::mutex> lk(m_);
-
             if (use_timeout_wait_) {
-                // ★ 타임아웃 감시 ON인 동안에는 최대 20ms마다 한 번씩 깨어나서
-                //   "마지막 제어 이후 0.3초 경과"를 검사할 수 있게 해준다.
                 woke_by_evt = cv_.wait_for(
                     lk,
                     std::chrono::milliseconds(20),
                     [&]{ return !running_.load() || ready_to_wake(); }
                 );
             } else {
-                // ★ 타임아웃 감시 OFF → 순수 이벤트 드리븐 모드
                 cv_.wait(lk, [&]{ return !running_.load() || ready_to_wake(); });
-                woke_by_evt = true; // 여기서 깬 건 이벤트 때문으로 취급
+                woke_by_evt = true;
             }
         }
         if (!running_.load()) break;
@@ -152,81 +146,63 @@ void ControlThread::run() {
         ctx.seq = ++seq_counter;
         g_ctrl_loop_ctx = &ctx;
 
-        // T0: 깨어난 직후
         ctx.t0 = flir::now_us_steady();
 
         if (woke_by_evt) {
-            // SD 우편함 체크
             handle_self_destruct();
             ctx.t1 = flir::now_us_steady();
 
-            // 이벤트 버스로부터 센싱/SD 이벤트 드레인
             had_new_sensing_evt_ = drain_events();
             ctx.t2 = flir::now_us_steady();
 
             if (mode_ == Mode::RUN) {
                 if (had_new_sensing_evt_) {
-                    // 센싱이 들어왔을 때만 해결/송신
+                    // ★ START 하기 전에는 제어 안 보냄
                     maybe_emit_control_if_target();
                 } else {
                     append_note("NO_SENSING_EVT");
                 }
             } else {
-                // SHUTDOWN 진행
                 step_shutdown_fsm();
             }
         } else {
-            // 타임아웃으로만 깨어난 경우 (이벤트 없음)
             ctx.t1 = ctx.t0;
             ctx.t2 = ctx.t0;
             append_note("TIMEOUT_WAKE");
         }
 
-        // ★ 여기서 “마지막 제어 이후 0.3초 경과” 검사 후 중립(0) 명령 전송
-        if (mode_ == Mode::RUN && use_timeout_wait_) {
-            auto now_tp  = clock_t::now();
-            auto dt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             now_tp - last_ctrl_tp_).count();
+        // ★ 타임아웃 중립은 START 이후에만 동작
+        if (mode_ == Mode::RUN && started_.load() && use_timeout_wait_) {
+            auto now_tp = clock_t::now();
+            auto dt_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              now_tp - last_ctrl_tp_
+                          ).count();
 
             if (dt_ms >= 300 && !neutral_sent_after_loss_) {
-                // 중립 명령 생성 (p1 = 0 → 직진)
                 CtrlCmd neutral{};
                 neutral.p1 = 0;
 
                 const uint64_t ts = flir::now_ns_steady();
-
                 append_note("CTRL_NEUTRAL_TIMEOUT");
 
-                // 메타 채널로도 보내고 싶으면 유지
                 Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ 0, ts } };
                 bus_.push(ev, Topic::Control);
 
-                // UART로 0 전송
                 act_.write_nonblock(neutral);
 
-                // 상태 갱신: 같은 loss 에피소드에서 한 번만 보내기
                 neutral_sent_after_loss_ = true;
                 last_ctrl_tp_            = now_tp;
 
-                // ★ 이번 에피소드에서는 중립을 이미 보냈으므로
-                //    더 이상 주기적으로 타임아웃 확인할 필요 없음
+                // 이 에피소드에서 중립 한 번 보낸 뒤에는 타임아웃 감시 끔
                 use_timeout_wait_ = false;
             }
         }
 
-        // T3: 전체 루프 끝
         ctx.t3 = flir::now_us_steady();
-
         if (ctx.note.empty()) {
             ctx.note = woke_by_evt ? "IDLE_WAKE" : "TIMEOUT_ONLY";
         }
-
-        CSV_LOG_TL("Ctrl",
-                   ctx.seq,
-                   ctx.t0, ctx.t1, ctx.t2, ctx.t3,
-                   0,
-                   ctx.note);
-
+        CSV_LOG_TL("Ctrl", ctx.seq, ctx.t0, ctx.t1, ctx.t2, ctx.t3, 0, ctx.note);
         g_ctrl_loop_ctx = nullptr;
     }
 }
@@ -268,7 +244,26 @@ bool ControlThread::drain_events() {
                             std::to_string(x.seq) +
                             ",level=" + std::to_string(x.level));
             } break;
-            
+
+            case EventType::GuidanceStart: {
+                const auto& x = std::get<GuidanceStartEvent>(ev->payload);
+
+                started_.store(true);
+                use_timeout_wait_        = true;
+                neutral_sent_after_loss_ = false;
+                last_ctrl_tp_            = clock_t::now();
+
+                append_note("GUIDE_START");
+
+                // 필요하다면 여기서 중기유도 phase를 확실히 세팅
+                GuidanceState::phase().store(GuidancePhase::Midcourse);
+
+                // ★ 이 타이밍에만 PC로 중기유도 START 알림
+                const uint64_t ts = flir::now_ns_steady();
+                CtrlCmd start_cmd = CtrlCmd::make_start_signal();
+                Event ev_start{ EventType::MetaCtrl, MetaCtrlEvent{ start_cmd.to_int(), ts } };
+                bus_.push(ev_start, Topic::Control);
+            } break;
 
             default:
                 break;
@@ -294,38 +289,35 @@ void ControlThread::handle_self_destruct() {
 }
 
 void ControlThread::maybe_emit_control_if_target() {
-    // 타깃 없으면 송신하지 않음
+    // ★ START 전에는 아무 제어도 내보내지 않음
+    if (!started_.load()) {
+        append_note("CTRL_SKIP_NOT_STARTED");
+        return;
+    }
+
     auto b = fusion_.last_box();
     if (!has_target_box(b)) {
         append_note("CTRL_SKIP_NO_TARGET");
         return;
     }
 
-    // 해결 → 송신
     CtrlCmd cmd = controller_.solve(fusion_);
     const uint64_t ts = flir::now_ns_steady();
 
     const auto ph = GuidanceState::phase().load();
-    const char* ph_str =
-        (ph == GuidancePhase::Midcourse ? "Midcourse" : "Terminal");
+    const char* ph_str = (ph == GuidancePhase::Midcourse ? "Midcourse" : "Terminal");
 
-    append_note(std::string("CTRL_OUT:phase=") +
-                ph_str +
+    append_note(std::string("CTRL_OUT:phase=") + ph_str +
                 ",cmd=" + std::to_string(cmd.to_int()));
 
-    // Meta_TxThread로 게시 (p1 값만 전송)
     Event ev{ EventType::MetaCtrl, MetaCtrlEvent{ (int)cmd.p1, ts } };
     bus_.push(ev, Topic::Control);
 
-    // UART 비차단 송신
     act_.write_nonblock(cmd);
 
-    // ★ 마지막 제어 시간 / 중립 플래그 갱신
     last_ctrl_tp_            = clock_t::now();
     neutral_sent_after_loss_ = false;
-
-    // ★ 새 제어가 나왔으므로 다시 타임아웃 감시 ON
-    use_timeout_wait_        = true;
+    use_timeout_wait_        = true;   // START 이후에만 의미 있음
 }
 
 void ControlThread::step_shutdown_fsm() {

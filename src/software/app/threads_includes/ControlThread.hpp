@@ -87,6 +87,8 @@ private:
     clock_t::time_point last_seen_tp_{};
     clock_t::time_point big_reached_tp_{};
 
+    std::atomic<bool> started_{false};
+
     // ★ 마지막으로 유효한 제어값을 UART로 보낸 시간
     clock_t::time_point last_ctrl_tp_{};
     // ★ 타임아웃 이후 중립(0) 명령을 이미 보냈는지 여부 (한 번만 보내기 위함)

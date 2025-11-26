@@ -160,6 +160,15 @@ static inline std::string to_lower(std::string s){
     return s;
 }
 
+bool Net_RxThread::parse_cmd_start_text_(const std::string& msg) {
+    std::string s = msg;
+    trim_in_place(s);
+    std::string sl = to_lower(s);
+
+    // "START" 하나만 받는다고 가정 (필요하면 run/go 등 추가)
+    return (sl == "start");
+}
+
 void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const sockaddr_in&) {
     if (len == 0) return;
 
@@ -227,6 +236,20 @@ void Net_RxThread::handle_datagram_(const uint8_t* data, size_t len, const socka
     std::string msg(reinterpret_cast<const char*>(data), len);
     trim_in_place(msg);
     if (msg.empty()) return;
+
+    if (parse_cmd_start_text_(msg)) {
+        // ControlThread가 구독하는 Topic::User로 "GuidanceStart" 이벤트 발행
+        GuidanceStartEvent ge{ flir::now_ns_steady() };
+        bus_.push(Event{ EventType::GuidanceStart, ge }, Topic::User);
+
+        const std::uint64_t t3_us = now_us_steady();
+        CSV_LOG_TL("Net.Rx",
+                   0,
+                   t0_us, t3_us, t3_us, t3_us,
+                   (t3_us >= t0_us ? t3_us - t0_us : 0),
+                   "START_RX");
+        return;
+    }
 
     // 2-1) 자폭 텍스트: "SD" / "SD <level>" / "SELF" / "SELF_DESTRUCT [level]"
     if (parse_cmd_sd_text_(msg, sd)) {

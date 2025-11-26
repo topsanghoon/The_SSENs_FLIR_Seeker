@@ -105,10 +105,10 @@ int main(int, char**) {
 
         // 유도 파라미터
         app->guidance.terminal_marker_id = 3;
-        app->guidance.min_bbox_w = 120;
-        app->guidance.min_bbox_h = 120;
-        app->guidance.min_big_frames = 5;
-        app->guidance.hold_big_ms = 300;
+        app->guidance.min_bbox_w = 140;
+        app->guidance.min_bbox_h = 140;
+        app->guidance.min_big_frames = 3;
+        app->guidance.hold_big_ms = 100;
         app->guidance.min_bbox_frac = 0.0f;
     }
 
@@ -118,11 +118,11 @@ int main(int, char**) {
     EventBus bus;
 
     // IR: TX/Track 소비자 큐
-    SpscMailbox<std::shared_ptr<IRFrameHandle>> mb_ir_tx(2);
+    SpscMailbox<std::shared_ptr<IRFrameHandle>> mb_ir_tx(1);
     SpscMailbox<std::shared_ptr<IRFrameHandle>> mb_ir_trk(1);
 
     // EO: TX/Aruco 소비자 큐
-    SpscMailbox<std::shared_ptr<EOFrameHandle>> mb_eo_tx(2);
+    SpscMailbox<std::shared_ptr<EOFrameHandle>> mb_eo_tx(1);
     SpscMailbox<std::shared_ptr<EOFrameHandle>> mb_eo_aru(1);
 
     // 입력/자폭

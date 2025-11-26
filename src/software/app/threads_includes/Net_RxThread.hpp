@@ -36,6 +36,7 @@ private:
     bool parse_cmd_click_(const std::string& msg, UserCmd& out);
     bool parse_cmd_sd_text_(const std::string& msg, SelfDestructCmd& out);
     bool parse_cmd_sd_bin_(const uint8_t* data, size_t len, SelfDestructCmd& out);
+    bool parse_cmd_start_text_(const std::string& msg);
 
 private:
     std::string   name_;
