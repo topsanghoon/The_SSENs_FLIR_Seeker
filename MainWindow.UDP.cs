@@ -62,6 +62,9 @@ namespace TheSSENS
         // 아르코 id
         public uint now_id = 0;
 
+        // 종말 상태 전달 인자
+        public bool finalentry = false;
+
         /// <summary>
         /// UDP 송신 클라이언트를 초기화합니다.
         /// </summary>
@@ -145,7 +148,10 @@ namespace TheSSENS
                                 }
                             case 9001:
                                 {
-                                    FinalHoming(10.0f);
+                                    // Thread.Sleep(3000);
+                                    // Map 에 전달용
+                                    finalentry = true;
+                                    
                                     DisableFlyStatusMid();
                                     EnableFlyStatusEnd();
 
@@ -437,6 +443,22 @@ namespace TheSSENS
             catch (Exception ex)
             {
                 AppendLog($"[TX-ERR] {ex.Message}");
+            }
+        }
+        private void SendMissionStart()
+        {
+            if (_cmdTx == null || _cmdRemoteEp == null) return;
+
+            try
+            {
+                const string msg = "START";
+                byte[] data = Encoding.UTF8.GetBytes(msg);
+
+                _cmdTx.Send(data, data.Length, _cmdRemoteEp);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[TX-ERR] SendMissionStart 실패: {ex.Message}");
             }
         }
 

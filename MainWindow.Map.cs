@@ -50,7 +50,7 @@ namespace TheSSENS
         private bool arriveflag = false;
         private uint prv_id = 0;
         private float Max_h = 100;
-        private const double TerminalThreshold = 35.0;   // 35 아래는 고정 속도 구간
+        private const double TerminalThreshold = 100;   // 45 아래는 고정 속도 구간
 
         private bool _terminalPhaseActive = false;      // 종말 구간(<=35) 진입 여부
         private double _virtualRemaining = 0.0;         // 종말 구간에서 사용하는 가상 남은거리
@@ -100,7 +100,7 @@ namespace TheSSENS
         private static readonly Dictionary<int, double[]> SCENARIO_EXT_TOTAL = new()
         {
             // 예: WP가 3개면 leg=3개 (Start->1, 1->2, 2->3)
-            { 1, new double[] { 100, 100, 100 } },
+            { 1, new double[] { 100, 100, 100, 100 } },
             { 2, new double[] { 100, 100, 100, 100 } },
             { 3, new double[] { 100, 100, 100 } },
         };
@@ -394,9 +394,11 @@ namespace TheSSENS
                 case 1:
 
                     _initialMissileLat = 37.02278; _initialMissileLng = 126.38667;
-                    _waypoints.Add(ParseDmsPoint("37°21'27\"N 125°44'45\"E"));
-                    _waypoints.Add(ParseDmsPoint("37°41'40\"N 125°30'08\"E"));
-                    _waypoints.Add(ParseDmsPoint("37°54'47\"N 125°25'10\"E"));
+                    _waypoints.Add(ParseDmsPoint("37°17'31\"N 126°05'31\"E"));
+                    _waypoints.Add(ParseDmsPoint("37°39'56\"N 125°42'03\"E"));
+                    _waypoints.Add(ParseDmsPoint("37°57'29\"N 126°02'41\"E"));
+                    _waypoints.Add(ParseDmsPoint("37°59'51\"N 126°27'06\"E"));
+                    _enemyAAMarkers.Add(CreateAAMarker(new PointLatLng(37.8475, 126.03611), "SA-3"));
                     break;
 
                 case 2:
@@ -436,7 +438,7 @@ namespace TheSSENS
             while (_legExternalTotal.Count < legCount) _legExternalTotal.Add(1);
             if (_legExternalTotal.Count > legCount) _legExternalTotal.RemoveRange(legCount, _legExternalTotal.Count - legCount);
 
-            AppendLog($"[INFO] 시나리오 {scenarioId} 로드: legs={legCount}, 외부총길이=[{string.Join(",", _legExternalTotal)}]");
+            //AppendLog($"[INFO] 시나리오 {scenarioId} 로드: legs={legCount}, 외부총길이=[{string.Join(",", _legExternalTotal)}]");
 
             UpdateFlightPathLine(); // 초기 경로(아이콘→현재 목표)
         }
@@ -648,6 +650,7 @@ namespace TheSSENS
                 _terminalPhaseActive = false;
 
                 MarkWaypointPassedAndAdvance();
+
                 return;
             }
 
@@ -750,6 +753,12 @@ namespace TheSSENS
             else
             {
                 UpdateFlightPathLine();
+                if (finalentry)
+                {
+                    FinalHoming(15.0f);
+                    
+                    return;
+                }
                 AppendLog($"[INFO] 웨이포인트 {_currentWaypointIndex} → {_currentWaypointIndex + 1} 전환.");
             }
         }
@@ -786,7 +795,7 @@ namespace TheSSENS
             _simulationRunning = true;
             _missionStopwatch?.Restart();
             _simulationTimer?.Start();
-            AppendLog("[INFO] 임무 시간 측정 시작.");
+            //AppendLog("[INFO] 임무 시간 측정 시작.");
         }
 
         private void OnSimulationLoopTick(object? sender, EventArgs e)
@@ -832,7 +841,7 @@ namespace TheSSENS
             }
 
             UpdateFlightPathLine();
-            AppendLog("[INFO] 시나리오 초기화 완료. 외부 남은거리 입력 대기.");
+            //AppendLog("[INFO] 시나리오 초기화 완료. 외부 남은거리 입력 대기.");
         }
 
         private void StopSimulation()

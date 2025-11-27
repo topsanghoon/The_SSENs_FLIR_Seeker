@@ -153,6 +153,7 @@ namespace TheSSENS
             MapControl.Zoom = 8;
             MapControl.MinZoom = 8;
             MapControl.MaxZoom = 8;
+            MapControl.CanDragMap = false;
             MapControl.ShowCenter = false;
             MapControl.CanDragMap = true;
 
@@ -210,9 +211,9 @@ namespace TheSSENS
 
         private void ZoomInMap()
         {
-            MapControl.Zoom = 8;
-            MapControl.MinZoom = 8;
-            MapControl.MaxZoom = 8;
+            MapControl.Zoom = 9;
+            MapControl.MinZoom = 9;
+            MapControl.MaxZoom = 9;
             MapControl.ShowCenter = false;
             MapControl.CanDragMap = true;
         }
@@ -761,7 +762,7 @@ namespace TheSSENS
 
         private void AbortMission_Click(object sender, RoutedEventArgs e)
         {
-            AppendLog("[WARN] 임무 수동 종료.");
+            //AppendLog("[WARN] 임무 수동 종료.");
             ZoomInMap();
             StopSimulation(); // 3. Map.cs의 시뮬레이션 종료
             // SetScenarioUIState(false, null); // [주석] StopSimulation이 내부적으로 SetScenarioUIState를 호출합니다.
@@ -771,6 +772,10 @@ namespace TheSSENS
         {
             ExecuteSimulationStart(); // 분리했던 '시작' 로직 호출
             ZoomInMap();
+
+            // 시작 신호 보내기
+            SendMissionStart();
+            
             // 버튼 상태 변경 (시작 -> 종료)
             StartMissionButton.Visibility = Visibility.Collapsed;
             AbortMissionButton.Visibility = Visibility.Visible;

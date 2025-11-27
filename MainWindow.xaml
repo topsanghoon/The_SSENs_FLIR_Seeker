@@ -189,13 +189,13 @@
             <RowDefinition Height="4*"/>
         </Grid.RowDefinitions>
 
-        <Border x:Name="LeftBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" BorderThickness="5" BorderBrush="{StaticResource side}" Margin="5">
+        <Border x:Name="LeftBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" BorderThickness="3" BorderBrush="{StaticResource side}" Margin="5">
             <WindowsFormsHost Name="videoHostLeft">
                 <mywf:DbPanel x:Name="videoPanelLeft" BackColor="Black"/>
             </WindowsFormsHost>
         </Border>
 
-        <Border x:Name="RightBorder" Grid.Row="0" Grid.Column="4" Grid.ColumnSpan="4" BorderThickness="5" BorderBrush="{StaticResource side}" Margin="5">
+        <Border x:Name="RightBorder" Grid.Row="0" Grid.Column="4" Grid.ColumnSpan="4" BorderThickness="3" BorderBrush="{StaticResource side}" Margin="5">
             <WindowsFormsHost Name="videoHostRight">
                 <mywf:DbPanel x:Name="videoPanelRight" BackColor="Black"/>
             </WindowsFormsHost>
@@ -412,19 +412,19 @@
                     <UniformGrid x:Name="ScenarioSelectionGrid" Rows="3" Columns="1" Margin="1">
                         <Button x:Name="Scenario1Button" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="Scenario1_Click">
                             <Viewbox>
-                                <TextBlock Text="시나리오:" FontWeight="Bold" Margin="2"/>
+                                <TextBlock Text="임무 1" FontWeight="Bold" Margin="2"/>
                             </Viewbox>
                         </Button>
 
                         <Button x:Name="Scenario2Button" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="Scenario2_Click">
                             <Viewbox>
-                                <TextBlock Text="시나리오 2:" FontWeight="Bold" Margin="2"/>
+                                <TextBlock Text="임무 2" FontWeight="Bold" Margin="2"/>
                             </Viewbox>
                         </Button>
 
                         <Button x:Name="Scenario3Button" Margin="5" Style="{StaticResource ClickableButtonStyle}" Click="Scenario3_Click">
                             <Viewbox>
-                                <TextBlock Text="시나리오 3:" FontWeight="Bold" Margin="2"/>
+                                <TextBlock Text="임무 3" FontWeight="Bold" Margin="2"/>
                             </Viewbox>
                         </Button>
                     </UniformGrid>

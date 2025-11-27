@@ -6,5 +6,17 @@
         WindowStyle="None"
         ShowInTaskbar="False"
         Topmost="True">
-    <Canvas Name="OverlayCanvas" Background="#01FFFFFF" MouseLeftButtonDown="OverlayCanvas_MouseLeftButtonDown"/>
+    <Canvas x:Name="OverlayCanvas"
+            Background= "#01FFFFFF"
+            MouseLeftButtonDown="OverlayCanvas_MouseLeftButtonDown"
+            MouseMove="OverlayCanvas_MouseMove">
+
+        <Rectangle x:Name="TargetBox"
+                   Width="148"
+                   Height="148"
+                   Stroke="Lime"
+                   StrokeThickness="4"
+                   Fill="#01FFFFFF"
+                   Visibility="Collapsed"/>
+    </Canvas>
 </Window>
