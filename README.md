@@ -58,7 +58,12 @@ The_SSENs_FLIR_Seeker/
 ---
 
 ## 🔧 하드웨어
+- **기구 설계**: fusion360
+- **전장 설계**: 각 소자 구입 후 AWG에 맞는 배선 연결([`hardware/`](./hardware/))에서 확인 가능
+- **3D printing**: Creality K1C
+- **재료**: Creality社 PLA+
 기구부 CAD 설계 파일(Fusion 360 `.f3d`, `.stl`)과 조립 이미지는 [`hardware/`](./hardware/README.md)에서 확인할 수 있습니다.
+
 
 ---
 
