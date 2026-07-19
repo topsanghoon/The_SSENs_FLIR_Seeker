@@ -31,13 +31,18 @@ The_SSENs_FLIR_Seeker/
 │ ├── host/ # 호스트 프로그램 (예: PC/Linux)
 │ └── sim/ # 시뮬레이션 코드 (알고리즘 테스트)
 │
-├── hardware/ # 회로도, PCB 파일, 센서 연결 정보
-│ └── schematics/
+├── hardware/ # 기구부 CAD 설계 파일
+│ ├── fusion360/
+│ │ ├── f3d/ # Fusion 360 원본 파일 (.f3d)
+│ │ └── stl/ # 3D 프린팅용 STL 파일 (.stl)
+│ ├── images/ # 조립/렌더링 이미지
+│ └── README.md
 │
-├── data/ # 테스트 데이터셋 (열화상 이미지, 로그 등)
-│ └── sample/
+├── data/ # 테스트 데이터셋 (열화상/가시광 이미지, 로그 등)
+│ ├── EO_Sample/
+│ └── FLIR_Sample/
 │
-├── scripts/ # 빌드, 분석, 자동화 스크립트
+├── image/ # README용 이미지 (운용 개념도 등)
 │
 └── README.md # 프로젝트 설명 문서 (현재 문서)
 ```
@@ -49,6 +54,11 @@ The_SSENs_FLIR_Seeker/
 - 임베디드 보드 상 실시간 처리 (Zynq + Petalinux)
 - 타겟 탐색 및 추적 알고리즘
 - 시뮬레이션 환경 제공 (C# WPF 기반)
+
+---
+
+## 🔧 하드웨어
+기구부 CAD 설계 파일(Fusion 360 `.f3d`, `.stl`)과 조립 이미지는 [`hardware/`](./hardware/README.md)에서 확인할 수 있습니다.
 
 ---
 
